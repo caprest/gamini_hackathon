@@ -116,13 +116,12 @@ export class GameScene extends Phaser.Scene {
             e.preventDefault();
             this.attack();
         });
-        this.input.keyboard!.on("keydown-ONE", () => this.selectSlot(0));
-        this.input.keyboard!.on("keydown-TWO", () => this.selectSlot(1));
-        this.input.keyboard!.on("keydown-THREE", () => this.selectSlot(2));
-        this.input.keyboard!.on("keydown-TAB", (e: KeyboardEvent) => {
-            e.preventDefault();
-            this.toggleMode();
-        });
+        this.input.keyboard!.on("keydown-ONE", () => this.selectWeaponSlot(0));
+        this.input.keyboard!.on("keydown-TWO", () => this.selectWeaponSlot(1));
+        this.input.keyboard!.on("keydown-THREE", () => this.selectWeaponSlot(2));
+        this.input.keyboard!.on("keydown-FOUR", () => this.selectMagicSlot(0));
+        this.input.keyboard!.on("keydown-FIVE", () => this.selectMagicSlot(1));
+        this.input.keyboard!.on("keydown-SIX", () => this.selectMagicSlot(2));
 
         // Spawner
         this.startSpawning();
@@ -197,20 +196,18 @@ export class GameScene extends Phaser.Scene {
         });
     }
 
-    private toggleMode() {
-        this.activeMode = this.activeMode === "weapon" ? "magic" : "weapon";
+    private selectWeaponSlot(index: number) {
+        if (index < 0 || index >= this.weapons.length) return;
+        this.activeWeaponIndex = index;
+        this.activeMode = "weapon";
         this.updateAllSpriteVisuals();
         this.emitInventoryUpdate();
     }
 
-    private selectSlot(index: number) {
-        if (this.activeMode === "weapon") {
-            if (index < 0 || index >= this.weapons.length) return;
-            this.activeWeaponIndex = index;
-        } else {
-            if (index < 0 || index >= this.magics.length) return;
-            this.activeMagicIndex = index;
-        }
+    private selectMagicSlot(index: number) {
+        if (index < 0 || index >= this.magics.length) return;
+        this.activeMagicIndex = index;
+        this.activeMode = "magic";
         this.updateAllSpriteVisuals();
         this.emitInventoryUpdate();
     }
@@ -607,31 +604,33 @@ export class GameScene extends Phaser.Scene {
 
         // Spawn boss after warning
         this.time.delayedCall(1500, () => {
-            const yPos = height - 56;
+            const yPos = height - 80;
             const bossConfig: ObstacleConfig = {
                 type: "boss",
-                hp: 150,
-                damage: 40,
-                speed: this.scrollSpeed * 0.5,
+                hp: 300,
+                damage: 50,
+                speed: this.scrollSpeed * 0.4,
                 sprite: "boss"
             };
             this.bossMaxHp = bossConfig.hp;
 
-            const boss = new Obstacle(this, width + 50, yPos, bossConfig);
+            const boss = new Obstacle(this, width + 80, yPos, bossConfig);
+            boss.setScale(1.8);
             this.obstacles.add(boss);
 
-            // Boss stops near the right side
+            // Adjust hitbox for scaled boss
             const body = boss.body as Phaser.Physics.Arcade.Body;
             if (body) {
                 body.setVelocityX(-bossConfig.speed);
+                body.setSize(boss.width * 0.7, boss.height * 0.8);
             }
 
             this.currentBoss = boss;
             this.bossActive = true;
 
-            // Create HP bar (rendered above boss)
-            this.bossHpBarBg = this.add.rectangle(boss.x, boss.y - 45, 80, 8, 0x333333).setOrigin(0.5).setDepth(90);
-            this.bossHpBar = this.add.rectangle(boss.x, boss.y - 45, 80, 8, 0xff0000).setOrigin(0.5).setDepth(91);
+            // Create HP bar (wider, rendered above boss)
+            this.bossHpBarBg = this.add.rectangle(boss.x, boss.y - 70, 120, 10, 0x333333).setOrigin(0.5).setDepth(90);
+            this.bossHpBar = this.add.rectangle(boss.x, boss.y - 70, 120, 10, 0xff0000).setOrigin(0.5).setDepth(91);
         });
     }
 
@@ -641,9 +640,9 @@ export class GameScene extends Phaser.Scene {
         const boss = this.currentBoss;
         const hpRatio = Math.max(0, boss.config.hp / this.bossMaxHp);
 
-        this.bossHpBarBg.setPosition(boss.x, boss.y - 45);
-        this.bossHpBar.setPosition(boss.x, boss.y - 45);
-        this.bossHpBar.width = 80 * hpRatio;
+        this.bossHpBarBg.setPosition(boss.x, boss.y - 70);
+        this.bossHpBar.setPosition(boss.x, boss.y - 70);
+        this.bossHpBar.width = 120 * hpRatio;
 
         // Stop boss near center-right of screen
         const body = boss.body as Phaser.Physics.Arcade.Body;
@@ -673,7 +672,7 @@ export class GameScene extends Phaser.Scene {
         });
 
         // Bonus score
-        const bonus = 1500;
+        const bonus = 3000;
         this.score += bonus;
         this.createScoreText(width / 2, height / 2, bonus);
         GameEventBus.emit("score-update", Math.floor(this.score));

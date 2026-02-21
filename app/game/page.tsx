@@ -24,6 +24,10 @@ export default function GamePage() {
                 </Link>
             </div>
 
+            <div className="w-full max-w-[800px] mb-3">
+                <BossSettings />
+            </div>
+
             <div className="relative w-full max-w-[800px]">
                 {/* React Error Boundary / Suspense for Phaser loading */}
                 <Suspense fallback={<div className="w-[800px] h-[300px] bg-slate-800 animate-pulse rounded-lg" />}>
@@ -34,10 +38,6 @@ export default function GamePage() {
 
             <div className="w-full max-w-[800px] mt-6">
                 <WeaponDisplay />
-            </div>
-
-            <div className="w-full max-w-[800px] mt-3">
-                <BossSettings />
             </div>
 
             <div className="w-full max-w-[800px] mt-4 flex gap-2 items-start">
