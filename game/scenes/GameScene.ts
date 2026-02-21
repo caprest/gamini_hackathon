@@ -1,0 +1,364 @@
+import * as Phaser from "phaser";
+import { Player } from "../objects/Player";
+import { Obstacle } from "../objects/Obstacle";
+import { GameEventBus } from "../EventBus";
+import { WeaponData, ObstacleConfig, DEFAULT_GAME_CONFIG } from "../../types/game";
+
+export class GameScene extends Phaser.Scene {
+    private player!: Player;
+    private obstacles!: Phaser.Physics.Arcade.Group;
+    private ground!: Phaser.GameObjects.TileSprite;
+
+    private scrollSpeed: number = DEFAULT_GAME_CONFIG.baseScrollSpeed;
+    private score: number = 0;
+    private hp: number = DEFAULT_GAME_CONFIG.initialHP;
+    private mp: number = DEFAULT_GAME_CONFIG.initialMP;
+
+    private currentWeapon: WeaponData | null = null;
+    private isCharging: boolean = false;
+    private chargeEffect: Phaser.GameObjects.Particles.ParticleEmitter | null = null;
+    private spawnEvent!: Phaser.Time.TimerEvent;
+    private mpRegenEvent!: Phaser.Time.TimerEvent;
+
+    constructor() {
+        super("GameScene");
+    }
+
+    create() {
+        const { width, height } = this.scale;
+
+        // Reset stats
+        this.score = 0;
+        this.hp = DEFAULT_GAME_CONFIG.initialHP;
+        this.mp = DEFAULT_GAME_CONFIG.initialMP;
+        this.scrollSpeed = DEFAULT_GAME_CONFIG.baseScrollSpeed;
+
+        // Background sky
+        this.add.rectangle(0, 0, width, height, 0x87ceeb).setOrigin(0, 0);
+
+        // Ground
+        this.ground = this.add.tileSprite(width / 2, height - 20, width, 40, "ground");
+        this.physics.add.existing(this.ground, true); // static body
+
+        // Player
+        this.player = new Player(this, 100, height - 80);
+        this.physics.add.collider(this.player, this.ground);
+
+        // Obstacles
+        this.obstacles = this.physics.add.group();
+
+        // Hit detection
+        this.physics.add.overlap(
+            this.player,
+            this.obstacles,
+            this.onHit as Phaser.Types.Physics.Arcade.ArcadePhysicsCallback,
+            undefined,
+            this
+        );
+
+        // Input
+        this.input.keyboard!.on("keydown-SPACE", () => this.attack());
+
+        // Spawner
+        this.startSpawning();
+
+        // MP Regen
+        this.mpRegenEvent = this.time.addEvent({
+            delay: 1000,
+            callback: () => {
+                if (this.hp > 0 && this.mp < DEFAULT_GAME_CONFIG.initialMP) {
+                    this.mp = Math.min(DEFAULT_GAME_CONFIG.initialMP, this.mp + DEFAULT_GAME_CONFIG.mpRegenRate);
+                    GameEventBus.emit("mp-update", this.mp);
+                }
+            },
+            callbackScope: this,
+            loop: true,
+        });
+
+        // Listen to React EventBus
+        this.setupEventBusListeners();
+
+        // Initial emit
+        GameEventBus.emit("hp-update", this.hp);
+        GameEventBus.emit("mp-update", this.mp);
+        GameEventBus.emit("score-update", 0);
+    }
+
+    private setupEventBusListeners() {
+        // Clean up previous listeners to prevent memory leaks in Phaser
+        GameEventBus.removeAllListeners("weapon-request");
+
+        GameEventBus.on("weapon-request", () => {
+            this.startCharging();
+        }, this);
+
+        GameEventBus.on("weapon-ready", (weaponData: WeaponData) => {
+            this.setWeapon(weaponData);
+        }, this);
+    }
+
+    private startSpawning() {
+        if (this.spawnEvent) this.spawnEvent.remove();
+        this.spawnEvent = this.time.addEvent({
+            delay: DEFAULT_GAME_CONFIG.spawnInterval,
+            callback: this.spawnObstacle,
+            callbackScope: this,
+            loop: true,
+        });
+    }
+
+    private spawnObstacle() {
+        const { width, height } = this.scale;
+        const yPos = height - 56;
+
+        // Choose randomly, simpler weight distribution for MVP
+        const rand = Math.random();
+        let config: ObstacleConfig;
+
+        if (rand < 0.6) {
+            config = { type: "cactus_small", hp: 10, damage: 20, speed: this.scrollSpeed, sprite: "cactus_small" };
+        } else if (rand < 0.9) {
+            config = { type: "cactus_large", hp: 30, damage: 30, speed: this.scrollSpeed, sprite: "cactus_large" };
+        } else {
+            config = { type: "pteranodon", hp: 20, damage: 25, speed: this.scrollSpeed * 1.5, sprite: "pteranodon" };
+        }
+
+        const obsY = config.type === "pteranodon" ? height - 120 : yPos;
+        const obstacle = new Obstacle(this, width + 50, obsY, config);
+        this.obstacles.add(obstacle);
+    }
+
+    setWeapon(weaponData: WeaponData) {
+        this.currentWeapon = weaponData;
+        this.isCharging = false;
+        if (this.chargeEffect) {
+            this.chargeEffect.stop();
+            this.chargeEffect.destroy();
+            this.chargeEffect = null;
+        }
+
+        // Create "READY!" text
+        const text = this.add.text(this.player.x, this.player.y - 40, "READY!", {
+            fontSize: "16px",
+            color: "#ffff00",
+            fontStyle: "bold"
+        }).setOrigin(0.5);
+
+        this.tweens.add({
+            targets: text,
+            y: text.y - 20,
+            alpha: 0,
+            duration: 1000,
+            onComplete: () => text.destroy()
+        });
+    }
+
+    startCharging() {
+        if (this.isCharging) return;
+        this.isCharging = true;
+
+        // Create particle effect
+        if (!this.chargeEffect) {
+            this.chargeEffect = this.add.particles(0, 0, "particle", {
+                x: this.player.x,
+                y: this.player.y,
+                speed: { min: -100, max: 100 },
+                angle: { min: 0, max: 360 },
+                scale: { start: 1, end: 0 },
+                lifespan: 600,
+                frequency: 30,
+                tint: 0xffff00,
+                blendMode: "ADD"
+            });
+        } else {
+            this.chargeEffect.start();
+        }
+
+        GameEventBus.emit("weapon-charging");
+    }
+
+    attack() {
+        if (this.hp <= 0) return;
+
+        if (!this.currentWeapon) {
+            // Barehand attack
+            this.performAttack(DEFAULT_GAME_CONFIG.bareHandDamage, "short", "slash", 0xffffff, "⚡");
+            return;
+        }
+
+        if (this.mp < this.currentWeapon.mp_cost) {
+            GameEventBus.emit("mp-insufficient");
+            // Fallback barehand
+            this.performAttack(DEFAULT_GAME_CONFIG.bareHandDamage, "short", "slash", 0xffffff, "⚡");
+            return;
+        }
+
+        // Use magic weapon
+        this.mp -= this.currentWeapon.mp_cost;
+        GameEventBus.emit("mp-update", this.mp);
+
+        this.performAttack(
+            this.currentWeapon.damage,
+            this.currentWeapon.range,
+            this.currentWeapon.attack_animation,
+            parseInt(this.currentWeapon.color.replace("#", "0x")) || 0xff0000,
+            this.currentWeapon.sprite_emoji
+        );
+
+        GameEventBus.emit("attack-executed", this.currentWeapon);
+        this.currentWeapon = null;
+    }
+
+    private performAttack(damage: number, range: string, animation: string, tint: number, emoji: string) {
+        // Visual representation of attack
+        let rangePx = 100;
+        if (range === "medium") rangePx = 300;
+        if (range === "long") rangePx = 800; // Whole screen
+
+        const hitbox = this.add.rectangle(
+            this.player.x + (rangePx / 2),
+            this.player.y,
+            rangePx,
+            100,
+            tint,
+            0.5
+        );
+        this.physics.add.existing(hitbox);
+
+        const body = hitbox.body as Phaser.Physics.Arcade.Body;
+        body.setAllowGravity(false);
+
+        // Flash effect
+        this.tweens.add({
+            targets: hitbox,
+            alpha: 0,
+            duration: 300,
+            onComplete: () => hitbox.destroy()
+        });
+
+        // Add emoji slash visual
+        const emojiVis = this.add.text(this.player.x + 50, this.player.y, emoji, { fontSize: "32px" }).setOrigin(0.5);
+
+        if (animation === "projectile") {
+            this.tweens.add({
+                targets: emojiVis,
+                x: this.player.x + rangePx,
+                duration: 500,
+                onComplete: () => emojiVis.destroy()
+            });
+        } else {
+            this.tweens.add({
+                targets: emojiVis,
+                angle: 180,
+                scale: 1.5,
+                alpha: 0,
+                duration: 300,
+                onComplete: () => emojiVis.destroy()
+            });
+        }
+
+        // Damage detection
+        this.physics.overlap(hitbox, this.obstacles, (hit, obs) => {
+            const obstacle = obs as Obstacle;
+            const killed = obstacle.takeDamage(damage);
+            if (killed) {
+                const pts = obstacle.config.hp * 10;
+                this.score += pts;
+                this.createScoreText(obstacle.x, obstacle.y, pts);
+                obstacle.destroy();
+                GameEventBus.emit("obstacle-destroyed", obstacle.config);
+                GameEventBus.emit("score-update", Math.floor(this.score));
+            }
+        });
+    }
+
+    private createScoreText(x: number, y: number, score: number) {
+        const text = this.add.text(x, y, `+${score}`, {
+            fontSize: "20px",
+            color: "#00ff00",
+            fontStyle: "bold",
+            stroke: "#000000",
+            strokeThickness: 3
+        }).setOrigin(0.5);
+
+        this.tweens.add({
+            targets: text,
+            y: y - 50,
+            alpha: 0,
+            duration: 1000,
+            onComplete: () => text.destroy()
+        });
+    }
+
+    private onHit(player: Phaser.GameObjects.GameObject, obj: Phaser.GameObjects.GameObject) {
+        if (this.hp <= 0) return;
+
+        const obstacle = obj as Obstacle;
+        this.hp -= obstacle.config.damage;
+
+        // Invicibility frames & visual feedback
+        this.player.setTint(0xff0000);
+        this.cameras.main.shake(200, 0.01);
+
+        this.time.delayedCall(200, () => {
+            if (this.hp > 0) this.player.clearTint();
+        });
+
+        GameEventBus.emit("hp-update", Math.max(0, this.hp));
+
+        obstacle.destroy();
+
+        if (this.hp <= 0) {
+            this.gameOver();
+        }
+    }
+
+    private gameOver() {
+        this.physics.pause();
+        this.spawnEvent.remove();
+        this.mpRegenEvent.remove();
+        this.player.setTint(0x555555);
+
+        this.time.delayedCall(1000, () => {
+            this.scene.start("GameOverScene", { score: Math.floor(this.score) });
+        });
+    }
+
+    update(time: number, delta: number) {
+        if (this.hp <= 0) return;
+
+        // Scroll ground and objects
+        this.ground.tilePositionX += this.scrollSpeed * (delta / 1000);
+
+        this.score += delta / 100;
+
+        // Update score UI every ~100ms
+        if (Math.floor(time) % 10 === 0) {
+            GameEventBus.emit("score-update", Math.floor(this.score));
+        }
+
+        // Increase difficulty
+        this.scrollSpeed = DEFAULT_GAME_CONFIG.baseScrollSpeed + Math.floor(this.score / 500) * DEFAULT_GAME_CONFIG.speedIncreaseRate;
+
+        // Update spawner delay based on speed
+        if (this.spawnEvent) {
+            const newDelay = Math.max(500, DEFAULT_GAME_CONFIG.spawnInterval - Math.floor(this.score / 500) * 100);
+            if (this.spawnEvent.delay !== newDelay) {
+                this.spawnEvent.reset({
+                    delay: newDelay,
+                    callback: this.spawnObstacle,
+                    callbackScope: this,
+                    loop: true,
+                });
+            }
+        }
+
+        // Cleanup offscreen objects
+        this.obstacles.getChildren().forEach(child => {
+            const obs = child as Obstacle;
+            if (obs.x < -100) {
+                obs.destroy();
+            }
+        });
+    }
+}
