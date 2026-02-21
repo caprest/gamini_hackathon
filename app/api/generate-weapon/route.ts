@@ -46,6 +46,7 @@ type WeaponPayload = {
     attack_animation: "slash" | "slash_wide" | "thrust" | "projectile" | "explosion" | "beam";
     description: string;
     uniqueness_score: number;
+    image_url?: string;
 };
 
 const ELEMENTS: WeaponPayload["element"][] = ["fire", "ice", "thunder", "wind", "earth", "light", "dark", "none"];
@@ -131,6 +132,35 @@ function normalizeWeaponPayload(input: unknown, userInput: string): WeaponPayloa
 function logGeminiDebug(stage: string, payload: Record<string, unknown>) {
     if (!DEBUG_GEMINI_WEAPON) return;
     console.warn(`[generate-weapon][debug] ${stage}`, payload);
+}
+
+async function attachWeaponImageIfAvailable(weaponData: WeaponPayload) {
+    if (!process.env.BANANA_API_KEY) return weaponData;
+    try {
+        const bananaPrompt = `pixel art style, 32x32 sprite, side view, game weapon, ${weaponData.weapon_name}, ${weaponData.element !== "none" ? `${weaponData.element} element` : ""}, ${weaponData.description}, solid white background, retro game style`;
+        const imageRes = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/nano-banana-pro-preview:generateContent?key=${process.env.BANANA_API_KEY}`,
+            {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    contents: [{ parts: [{ text: bananaPrompt }] }],
+                }),
+            }
+        );
+        if (!imageRes.ok) {
+            console.error("Banana API Weapon Image generation failed:", await imageRes.text());
+            return weaponData;
+        }
+        const imageData = await imageRes.json();
+        const inlineData = imageData.candidates?.[0]?.content?.parts?.[0]?.inlineData;
+        if (inlineData) {
+            weaponData.image_url = `data:${inlineData.mimeType};base64,${inlineData.data}`;
+        }
+    } catch (imgError) {
+        console.error("Banana API Error for Weapon:", imgError);
+    }
+    return weaponData;
 }
 
 function fallbackWeapon(userInput: string): WeaponPayload {
@@ -310,7 +340,8 @@ export async function POST(req: NextRequest) {
                 const weaponData = normalizeWeaponPayload(parsed, userInput);
                 if (weaponData) {
                     logGeminiDebug("normalized-weapon", weaponData as unknown as Record<string, unknown>);
-                    return NextResponse.json(weaponData);
+                    const withImage = await attachWeaponImageIfAvailable(weaponData);
+                    return NextResponse.json(withImage);
                 }
                 throw new Error("Normalized weapon payload is invalid");
             } catch {
@@ -347,7 +378,8 @@ export async function POST(req: NextRequest) {
             const compactWeapon = normalizeWeaponPayload(compactParsed, userInput);
             if (compactWeapon) {
                 logGeminiDebug("compact-normalized-weapon", compactWeapon as unknown as Record<string, unknown>);
-                return NextResponse.json(compactWeapon);
+                const withImage = await attachWeaponImageIfAvailable(compactWeapon);
+                return NextResponse.json(withImage);
             }
             throw new Error("Normalized compact weapon payload is invalid");
         } catch {

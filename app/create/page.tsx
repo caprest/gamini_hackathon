@@ -30,6 +30,7 @@ export default function CreateCharacterPage() {
             if (res.ok) {
                 if (data.imageUrl) {
                     setResultImage(data.imageUrl);
+                    localStorage.setItem("customPlayerImage", data.imageUrl);
                 } else if (data.emojiFallback) {
                     setError(`APIキーが設定されていないため、フォールバック絵文字(${data.emojiFallback})が選択されました。`);
                 }
@@ -89,7 +90,7 @@ export default function CreateCharacterPage() {
                                 alt="Generated Character"
                                 width={256}
                                 height={256}
-                                className="pixelated"
+                                className="pixelated bg-transparent mix-blend-multiply"
                                 unoptimized
                             />
                         </div>

@@ -7,6 +7,9 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
         scene.add.existing(this);
         scene.physics.add.existing(this);
 
+        // Force strictly 64x64 so AI generated images don't cover the screen/hitbox
+        this.setDisplaySize(64, 64);
+
         // Physics setup
         this.setCollideWorldBounds(true);
         this.setGravityY(1000);
@@ -15,6 +18,9 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
         const body = this.body as Phaser.Physics.Arcade.Body;
         body.setSize(this.width * 0.6, this.height * 0.8);
         body.setOffset(this.width * 0.2, this.height * 0.2);
+
+        // Make background transparent over game elements
+        this.setBlendMode(Phaser.BlendModes.MULTIPLY);
     }
 
     jump() {

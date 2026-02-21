@@ -56,6 +56,8 @@ export function InputArea() {
         if (e) e.preventDefault();
         if (!text.trim() || isGenerating) return;
 
+        // Note: Actual MP handling is ideally checked before this, but for simplicity
+        // we'll let GameScene handle the MP deduction when it hears 'weapon-request'.
         setIsGenerating(true);
         GameEventBus.emit("weapon-request");
 
@@ -98,7 +100,8 @@ export function InputArea() {
                     color: "#888888",
                     attack_animation: "slash",
                     description: "生成に失敗した悲しい武器",
-                    uniqueness_score: 0
+                    uniqueness_score: 0,
+                    image_url: null
                 });
             }
         } catch (err) {
