@@ -48,6 +48,7 @@ export class GameScene extends Phaser.Scene {
     private bossHpBarBg: Phaser.GameObjects.Rectangle | null = null;
     private bossMaxHp: number = 150;
     private gameElapsedSec: number = 0;
+    private bossDefeated: boolean = false;
 
     constructor() {
         super("GameScene");
@@ -88,6 +89,7 @@ export class GameScene extends Phaser.Scene {
         this.bossHpBar = null;
         this.bossHpBarBg = null;
         this.gameElapsedSec = 0;
+        this.bossDefeated = false;
 
         // Background sky
         this.add.rectangle(0, 0, width, height, 0x87ceeb).setOrigin(0, 0);
@@ -547,11 +549,14 @@ export class GameScene extends Phaser.Scene {
 
         this.physics.overlap(hitbox, this.obstacles, (hit, obs) => {
             const obstacle = obs as Obstacle;
+            if (!obstacle.active) return;
+
+            const hpBeforeHit = obstacle.config.hp;
             const killed = obstacle.takeDamage(damage);
             if (killed) {
                 const isBoss = obstacle.config.type === "boss";
                 if (!isBoss) {
-                    const pts = obstacle.config.hp * 10;
+                    const pts = Math.max(0, hpBeforeHit) * 10;
                     this.score += pts;
                     this.createScoreText(obstacle.x, obstacle.y, pts);
                 }
@@ -658,6 +663,9 @@ export class GameScene extends Phaser.Scene {
     }
 
     private onBossDefeated() {
+        if (this.bossDefeated) return;
+        this.bossDefeated = true;
+
         const { width, height } = this.scale;
 
         // Victory text
@@ -690,8 +698,13 @@ export class GameScene extends Phaser.Scene {
         this.bossActive = false;
         this.currentBoss = null;
 
-        // Resume normal spawning
-        if (this.spawnEvent) this.spawnEvent.paused = false;
+        // End the run after boss defeat.
+        this.physics.pause();
+        if (this.spawnEvent) this.spawnEvent.remove();
+        if (this.mpRegenEvent) this.mpRegenEvent.remove();
+        this.time.delayedCall(1200, () => {
+            this.scene.start("GameOverScene", { score: Math.floor(this.score), cleared: true });
+        });
     }
 
     private onHit(player: Phaser.GameObjects.GameObject, obj: Phaser.GameObjects.GameObject) {
@@ -904,7 +917,7 @@ export class GameScene extends Phaser.Scene {
         this.currentBoss = null;
 
         this.time.delayedCall(1000, () => {
-            this.scene.start("GameOverScene", { score: Math.floor(this.score) });
+            this.scene.start("GameOverScene", { score: Math.floor(this.score), cleared: false });
         });
     }
 
