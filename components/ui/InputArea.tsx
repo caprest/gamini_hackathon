@@ -220,7 +220,7 @@ export function InputArea() {
                 </button>
             </form>
             <div className="text-xs text-slate-500 mt-2 ml-1">
-                ※スペースキーで攻撃！1,2,3で選択 / Tabで武器⇔魔法切替
+                ※スペースキーで攻撃！1,2,3で武器選択 / 4,5,6で魔法選択
                 {!isMagicMode && weaponCount >= MAX_SLOTS && " | 武器満杯 (古い武器と入替)"}
                 {isMagicMode && magicCount >= MAX_SLOTS && " | 魔法満杯 (古い魔法と入替)"}
             </div>
