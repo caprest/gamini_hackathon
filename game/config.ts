@@ -3,6 +3,7 @@ import { BootScene } from "./scenes/BootScene";
 import { MainMenuScene } from "./scenes/MainMenuScene";
 import { GameScene } from "./scenes/GameScene";
 import { GameOverScene } from "./scenes/GameOverScene";
+import { VictoryScene } from "./scenes/VictoryScene";
 
 export const GAME_CONFIG: Phaser.Types.Core.GameConfig = {
     type: Phaser.AUTO,
@@ -17,7 +18,7 @@ export const GAME_CONFIG: Phaser.Types.Core.GameConfig = {
             debug: false,
         },
     },
-    scene: [BootScene, MainMenuScene, GameScene, GameOverScene],
+    scene: [BootScene, MainMenuScene, GameScene, GameOverScene, VictoryScene],
     scale: {
         mode: Phaser.Scale.FIT,
         autoCenter: Phaser.Scale.CENTER_BOTH,
