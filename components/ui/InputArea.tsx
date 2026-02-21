@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { GameEventBus } from "@/game/EventBus";
 import { WeaponData } from "@/types/game";
+import { incrementApiUsage } from "@/components/ui/ApiUsageIndicator";
 
 function sanitizeWeaponData(input: unknown): WeaponData {
     const data = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
@@ -85,6 +86,7 @@ export function InputArea() {
         GameEventBus.emit("weapon-request", isMagicMode ? 30 : 20);
 
         try {
+            incrementApiUsage();
             const res = await fetch("/api/generate-weapon", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
