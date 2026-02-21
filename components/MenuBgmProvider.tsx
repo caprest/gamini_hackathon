@@ -1,78 +1,62 @@
 "use client";
 
-import { useEffect, useRef, useCallback } from "react";
+import { useEffect, useRef } from "react";
 import { usePathname } from "next/navigation";
 
 const MENU_PAGES = ["/", "/create"];
 
 export function MenuBgmProvider() {
     const audioRef = useRef<HTMLAudioElement | null>(null);
-    const startedRef = useRef(false);
     const pathname = usePathname();
     const shouldPlay = MENU_PAGES.includes(pathname);
 
-    const getAudio = useCallback(() => {
-        if (!audioRef.current) {
-            audioRef.current = new Audio("/sounds/bgm_menu.mp3");
-            audioRef.current.loop = true;
-            audioRef.current.volume = 0.5;
+    // Try to play audio, safe to call multiple times
+    const tryResume = () => {
+        const el = audioRef.current;
+        if (!el || !shouldPlay) return;
+        if (el.paused) {
+            el.play().catch(() => { /* will retry on next interaction */ });
         }
-        return audioRef.current;
-    }, []);
+    };
 
-    const tryPlay = useCallback(() => {
-        if (!shouldPlay) return;
-        const audio = getAudio();
-        if (audio.paused) {
-            audio.play().then(() => {
-                startedRef.current = true;
-            }).catch(() => {
-                // Autoplay blocked — will retry on next user interaction
-            });
-        }
-    }, [shouldPlay, getAudio]);
-
-    // Start/stop based on route
-    useEffect(() => {
-        const audio = getAudio();
-        if (shouldPlay) {
-            tryPlay();
-        } else {
-            audio.pause();
-            audio.currentTime = 0;
-        }
-    }, [shouldPlay, getAudio, tryPlay]);
-
-    // Listen for first user interaction to unlock audio
+    // Attach global interaction listeners to unlock audio on first user gesture
     useEffect(() => {
         if (!shouldPlay) return;
 
-        const onInteraction = () => {
-            if (!startedRef.current) {
-                tryPlay();
-            }
-        };
+        const handler = () => tryResume();
 
-        document.addEventListener("click", onInteraction, { once: false });
-        document.addEventListener("keydown", onInteraction, { once: false });
-        document.addEventListener("touchstart", onInteraction, { once: false });
+        // Use capture phase to fire before click handlers that cause navigation
+        document.addEventListener("pointerdown", handler, true);
+        document.addEventListener("keydown", handler, true);
+
+        // Also try immediately in case audio context is already unlocked
+        tryResume();
 
         return () => {
-            document.removeEventListener("click", onInteraction);
-            document.removeEventListener("keydown", onInteraction);
-            document.removeEventListener("touchstart", onInteraction);
+            document.removeEventListener("pointerdown", handler, true);
+            document.removeEventListener("keydown", handler, true);
         };
-    }, [shouldPlay, tryPlay]);
+    });
 
-    // Cleanup on full unmount
+    // Stop BGM when navigating away from menu pages
     useEffect(() => {
-        return () => {
-            if (audioRef.current) {
-                audioRef.current.pause();
-                audioRef.current = null;
-            }
-        };
-    }, []);
+        if (!shouldPlay && audioRef.current) {
+            audioRef.current.pause();
+            audioRef.current.currentTime = 0;
+        }
+    }, [shouldPlay]);
 
-    return null;
+    if (!shouldPlay) return null;
+
+    return (
+        <audio
+            ref={audioRef}
+            src="/sounds/bgm_menu.mp3"
+            loop
+            autoPlay
+            // @ts-expect-error webkit vendor attribute for iOS
+            playsInline="true"
+            style={{ display: "none" }}
+        />
+    );
 }
