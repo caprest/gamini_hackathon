@@ -15,6 +15,7 @@ export function WeaponDisplay() {
         };
 
         const handleReady = (newWeapon: WeaponData) => {
+            console.warn("[weapon-debug] WeaponDisplay handleReady", newWeapon);
             setIsCharging(false);
             setWeapon(newWeapon);
         };
@@ -50,6 +51,16 @@ export function WeaponDisplay() {
         );
     }
 
+    const elementLabel = weapon.element || "none";
+    const damageLabel = Number.isFinite(Number(weapon.damage)) ? String(weapon.damage) : "20";
+    const mpLabel = Number.isFinite(Number(weapon.mp_cost)) ? String(weapon.mp_cost) : "8";
+    console.warn("[weapon-debug] WeaponDisplay render labels", {
+        elementLabel,
+        damageLabel,
+        mpLabel,
+        weapon,
+    });
+
     return (
         <div
             className="bg-white border-2 p-4 rounded-lg flex items-center justify-between"
@@ -75,16 +86,16 @@ export function WeaponDisplay() {
                 </div>
             </div>
 
-            <div className="text-right text-sm">
+            <div className="text-right text-sm text-slate-900">
                 <div className="grid grid-cols-2 gap-x-4">
                     <span className="text-slate-500">属性:</span>
-                    <span className="font-semibold capitalize">{weapon.element}</span>
+                    <span className="font-semibold capitalize">{elementLabel}</span>
 
                     <span className="text-slate-500">ダメージ:</span>
-                    <span className="font-semibold">{weapon.damage}</span>
+                    <span className="font-semibold">{damageLabel}</span>
 
                     <span className="text-slate-500">消費MP:</span>
-                    <span className="font-semibold text-blue-600">{weapon.mp_cost}</span>
+                    <span className="font-semibold text-blue-600">{mpLabel}</span>
                 </div>
             </div>
         </div>

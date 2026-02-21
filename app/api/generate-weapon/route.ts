@@ -2,6 +2,7 @@ import { GoogleGenerativeAI, SchemaType, type Schema } from "@google/generative-
 import { NextRequest, NextResponse } from "next/server";
 
 export const runtime = "nodejs";
+const DEBUG_GEMINI_WEAPON = process.env.DEBUG_GEMINI_WEAPON === "1";
 
 const WEAPON_RESPONSE_SCHEMA: Schema = {
     type: SchemaType.OBJECT,
@@ -48,7 +49,12 @@ type WeaponPayload = {
     image_url?: string;
 };
 
-function tryParseWeaponJson(raw: string): WeaponPayload {
+const ELEMENTS: WeaponPayload["element"][] = ["fire", "ice", "thunder", "wind", "earth", "light", "dark", "none"];
+const TYPES: WeaponPayload["type"][] = ["melee", "ranged", "magic"];
+const RANGES: WeaponPayload["range"][] = ["short", "medium", "long"];
+const ANIMATIONS: WeaponPayload["attack_animation"][] = ["slash", "slash_wide", "thrust", "projectile", "explosion", "beam"];
+
+function tryParseWeaponJson(raw: string): unknown {
     const trimmed = raw.trim();
     const fenceMatch = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
     const candidates = [
@@ -59,16 +65,102 @@ function tryParseWeaponJson(raw: string): WeaponPayload {
 
     for (const candidate of candidates) {
         try {
-            return JSON.parse(candidate) as WeaponPayload;
+            return JSON.parse(candidate);
         } catch {
             const match = candidate.match(/\{[\s\S]*\}/);
             if (match) {
-                return JSON.parse(match[0]) as WeaponPayload;
+                return JSON.parse(match[0]);
             }
         }
     }
 
     throw new Error(`Model returned non-JSON output: ${raw.slice(0, 200)}`);
+}
+
+function normalizeWeaponPayload(input: unknown, userInput: string): WeaponPayload | null {
+    const data = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
+    const from = (keys: string[]) => {
+        for (const key of keys) {
+            const value = data[key];
+            if (value !== undefined && value !== null && String(value).trim() !== "") return value;
+        }
+        return undefined;
+    };
+    const toNumber = (value: unknown, fallback: number, min?: number, max?: number) => {
+        const n = Number(value);
+        if (!Number.isFinite(n)) return fallback;
+        const rounded = Math.round(n);
+        if (min !== undefined && rounded < min) return min;
+        if (max !== undefined && rounded > max) return max;
+        return rounded;
+    };
+    const toString = (value: unknown, fallback: string) => {
+        const s = String(value ?? "").trim();
+        return s || fallback;
+    };
+
+    const rawType = toString(from(["type", "weapon_type", "weaponType", "種類"]), "melee");
+    const rawRange = toString(from(["range", "weapon_range", "weaponRange", "射程"]), "short");
+    const rawElement = toString(from(["element", "attribute", "attr", "属性"]), "none");
+    const rawAnimation = toString(from(["attack_animation", "attackAnimation", "animation", "攻撃アニメーション"]), "slash");
+
+    const type = TYPES.includes(rawType as WeaponPayload["type"]) ? (rawType as WeaponPayload["type"]) : "melee";
+    const range = RANGES.includes(rawRange as WeaponPayload["range"]) ? (rawRange as WeaponPayload["range"]) : "short";
+    const element = ELEMENTS.includes(rawElement as WeaponPayload["element"]) ? (rawElement as WeaponPayload["element"]) : "none";
+    const attack_animation = ANIMATIONS.includes(rawAnimation as WeaponPayload["attack_animation"])
+        ? (rawAnimation as WeaponPayload["attack_animation"])
+        : "slash";
+
+    const weapon: WeaponPayload = {
+        weapon_name: toString(from(["weapon_name", "name", "weaponName", "武器名"]), `${userInput.slice(0, 10) || "ことば"}の武器`),
+        type,
+        damage: toNumber(from(["damage", "power", "attack", "ダメージ"]), 20, 1, 999),
+        mp_cost: toNumber(from(["mp_cost", "mpCost", "mana_cost", "消費MP"]), 8, 0, 999),
+        range,
+        element,
+        sprite_emoji: toString(from(["sprite_emoji", "emoji", "icon", "絵文字"]), "🗡️"),
+        color: /^#[0-9A-Fa-f]{6}$/.test(toString(from(["color", "hex", "カラー"]), "")) ? toString(from(["color", "hex", "カラー"]), "#4B5563") : "#4B5563",
+        attack_animation,
+        description: toString(from(["description", "desc", "説明"]), "生成武器"),
+        uniqueness_score: toNumber(from(["uniqueness_score", "uniqueness", "独自性"]), 20, 0, 100),
+    };
+
+    if (!weapon.weapon_name || !Number.isFinite(weapon.damage)) return null;
+    return weapon;
+}
+
+function logGeminiDebug(stage: string, payload: Record<string, unknown>) {
+    if (!DEBUG_GEMINI_WEAPON) return;
+    console.warn(`[generate-weapon][debug] ${stage}`, payload);
+}
+
+async function attachWeaponImageIfAvailable(weaponData: WeaponPayload) {
+    if (!process.env.BANANA_API_KEY) return weaponData;
+    try {
+        const bananaPrompt = `pixel art style, 32x32 sprite, side view, game weapon, ${weaponData.weapon_name}, ${weaponData.element !== "none" ? `${weaponData.element} element` : ""}, ${weaponData.description}, solid white background, retro game style`;
+        const imageRes = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/nano-banana-pro-preview:generateContent?key=${process.env.BANANA_API_KEY}`,
+            {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    contents: [{ parts: [{ text: bananaPrompt }] }],
+                }),
+            }
+        );
+        if (!imageRes.ok) {
+            console.error("Banana API Weapon Image generation failed:", await imageRes.text());
+            return weaponData;
+        }
+        const imageData = await imageRes.json();
+        const inlineData = imageData.candidates?.[0]?.content?.parts?.[0]?.inlineData;
+        if (inlineData) {
+            weaponData.image_url = `data:${inlineData.mimeType};base64,${inlineData.data}`;
+        }
+    } catch (imgError) {
+        console.error("Banana API Error for Weapon:", imgError);
+    }
+    return weaponData;
 }
 
 function fallbackWeapon(userInput: string): WeaponPayload {
@@ -235,35 +327,23 @@ export async function POST(req: NextRequest) {
             const result = await model.generateContent(content);
             const raw = result.response.text();
             const finishReason = result.response.candidates?.[0]?.finishReason;
+            logGeminiDebug("model-response", {
+                finishReason: finishReason || "UNKNOWN",
+                rawLength: raw.length,
+                raw,
+            });
             try {
-                const weaponData = tryParseWeaponJson(raw);
-                if (process.env.BANANA_API_KEY) {
-                    try {
-                        const bananaPrompt = `pixel art style, 32x32 sprite, side view, game weapon, ${weaponData.weapon_name}, ${weaponData.element !== "none" ? `${weaponData.element} element` : ""}, ${weaponData.description}, solid white background, retro game style`;
-                        const imageRes = await fetch(
-                            `https://generativelanguage.googleapis.com/v1beta/models/nano-banana-pro-preview:generateContent?key=${process.env.BANANA_API_KEY}`,
-                            {
-                                method: "POST",
-                                headers: { "Content-Type": "application/json" },
-                                body: JSON.stringify({
-                                    contents: [{ parts: [{ text: bananaPrompt }] }],
-                                }),
-                            }
-                        );
-                        if (imageRes.ok) {
-                            const imageData = await imageRes.json();
-                            const inlineData = imageData.candidates?.[0]?.content?.parts?.[0]?.inlineData;
-                            if (inlineData) {
-                                weaponData.image_url = `data:${inlineData.mimeType};base64,${inlineData.data}`;
-                            }
-                        } else {
-                            console.error("Banana API Weapon Image generation failed:", await imageRes.text());
-                        }
-                    } catch (imgError) {
-                        console.error("Banana API Error for Weapon:", imgError);
-                    }
+                const parsed = tryParseWeaponJson(raw);
+                logGeminiDebug("parsed-json", {
+                    parsed,
+                });
+                const weaponData = normalizeWeaponPayload(parsed, userInput);
+                if (weaponData) {
+                    logGeminiDebug("normalized-weapon", weaponData as unknown as Record<string, unknown>);
+                    const withImage = await attachWeaponImageIfAvailable(weaponData);
+                    return NextResponse.json(withImage);
                 }
-                return NextResponse.json(weaponData);
+                throw new Error("Normalized weapon payload is invalid");
             } catch {
                 console.warn("[generate-weapon] JSON parse failed", {
                     finishReason: finishReason || "UNKNOWN",
@@ -285,9 +365,23 @@ export async function POST(req: NextRequest) {
 入力: "${userInput}"`;
         const compactResult = await compactModel.generateContent([{ text: compactPrompt }]);
         const compactRaw = compactResult.response.text();
+        logGeminiDebug("compact-model-response", {
+            finishReason: compactResult.response.candidates?.[0]?.finishReason || "UNKNOWN",
+            rawLength: compactRaw.length,
+            raw: compactRaw,
+        });
         try {
-            const compactWeapon = tryParseWeaponJson(compactRaw);
-            return NextResponse.json(compactWeapon);
+            const compactParsed = tryParseWeaponJson(compactRaw);
+            logGeminiDebug("compact-parsed-json", {
+                parsed: compactParsed,
+            });
+            const compactWeapon = normalizeWeaponPayload(compactParsed, userInput);
+            if (compactWeapon) {
+                logGeminiDebug("compact-normalized-weapon", compactWeapon as unknown as Record<string, unknown>);
+                const withImage = await attachWeaponImageIfAvailable(compactWeapon);
+                return NextResponse.json(withImage);
+            }
+            throw new Error("Normalized compact weapon payload is invalid");
         } catch {
             console.warn("[generate-weapon] compact retry parse failed", {
                 finishReason: compactResult.response.candidates?.[0]?.finishReason || "UNKNOWN",

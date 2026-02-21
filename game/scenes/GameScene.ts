@@ -93,6 +93,7 @@ export class GameScene extends Phaser.Scene {
         }, this);
 
         GameEventBus.on("weapon-ready", (weaponData: WeaponData) => {
+            console.warn("[weapon-debug] GameScene weapon-ready", weaponData);
             this.setWeapon(weaponData);
         }, this);
     }
