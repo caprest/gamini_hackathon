@@ -47,9 +47,17 @@ export class GameScene extends Phaser.Scene {
     private bossHpBarBg: Phaser.GameObjects.Rectangle | null = null;
     private bossMaxHp: number = 150;
     private gameElapsedSec: number = 0;
+    private bossBgOverlay: Phaser.GameObjects.Rectangle | null = null;
+    private bossBorderTop: Phaser.GameObjects.Rectangle | null = null;
+    private bossBorderBottom: Phaser.GameObjects.Rectangle | null = null;
+    private stage: number = 1;
 
     constructor() {
         super("GameScene");
+    }
+
+    init(data?: { stage?: number }) {
+        this.stage = data?.stage ?? 1;
     }
 
     create() {
@@ -577,57 +585,115 @@ export class GameScene extends Phaser.Scene {
 
     private spawnBoss() {
         this.bossSpawned = true;
-
-        // Warning text
         const { width, height } = this.scale;
-        const warning = this.add.text(width / 2, height / 2 - 40, "⚠️ BOSS INCOMING!", {
-            fontSize: "32px",
-            color: "#ff0000",
-            fontStyle: "bold",
-            stroke: "#000000",
-            strokeThickness: 4
-        }).setOrigin(0.5).setDepth(100);
-
-        this.tweens.add({
-            targets: warning,
-            alpha: 0,
-            y: warning.y - 30,
-            duration: 1500,
-            onComplete: () => warning.destroy()
-        });
 
         // Pause normal spawning
         if (this.spawnEvent) this.spawnEvent.paused = true;
 
-        // Spawn boss after warning
-        this.time.delayedCall(1500, () => {
-            const yPos = height - 80;
-            const bossConfig: ObstacleConfig = {
-                type: "boss",
-                hp: 300,
-                damage: 50,
-                speed: this.scrollSpeed * 0.4,
-                sprite: "boss"
-            };
-            this.bossMaxHp = bossConfig.hp;
+        // --- Phase 1: Screen flash + dark overlay ---
+        const flash = this.add.rectangle(0, 0, width, height, 0xffffff, 1).setOrigin(0, 0).setDepth(200);
+        this.tweens.add({
+            targets: flash,
+            alpha: 0,
+            duration: 300,
+            onComplete: () => flash.destroy()
+        });
 
-            const boss = new Obstacle(this, width + 80, yPos, bossConfig);
-            boss.setScale(1.8);
-            this.obstacles.add(boss);
+        // Dark cinematic overlay
+        const darkOverlay = this.add.rectangle(0, 0, width, height, 0x000000, 0.7).setOrigin(0, 0).setDepth(150);
 
-            // Adjust hitbox for scaled boss
-            const body = boss.body as Phaser.Physics.Arcade.Body;
-            if (body) {
-                body.setVelocityX(-bossConfig.speed);
-                body.setSize(boss.width * 0.7, boss.height * 0.8);
-            }
+        // Cinematic bars (top & bottom)
+        const barHeight = 30;
+        const barTop = this.add.rectangle(0, -barHeight, width, barHeight, 0x000000).setOrigin(0, 0).setDepth(151);
+        const barBottom = this.add.rectangle(0, height, width, barHeight, 0x000000).setOrigin(0, 0).setDepth(151);
+        this.tweens.add({ targets: barTop, y: 0, duration: 400, ease: "Quad.easeOut" });
+        this.tweens.add({ targets: barBottom, y: height - barHeight, duration: 400, ease: "Quad.easeOut" });
 
-            this.currentBoss = boss;
-            this.bossActive = true;
+        // --- Phase 2: WARNING banner with flash ---
+        this.time.delayedCall(400, () => {
+            // Warning stripe background
+            const stripeBg = this.add.rectangle(width / 2, height / 2, width, 60, 0xff0000, 0.9).setDepth(160);
 
-            // Create HP bar (wider, rendered above boss)
-            this.bossHpBarBg = this.add.rectangle(boss.x, boss.y - 70, 120, 10, 0x333333).setOrigin(0.5).setDepth(90);
-            this.bossHpBar = this.add.rectangle(boss.x, boss.y - 70, 120, 10, 0xff0000).setOrigin(0.5).setDepth(91);
+            // Warning text
+            const warningText = this.add.text(width / 2, height / 2, "⚠ WARNING  ─  BOSS INCOMING ─  WARNING ⚠", {
+                fontSize: "22px",
+                color: "#ffffff",
+                fontStyle: "bold",
+                stroke: "#000000",
+                strokeThickness: 3,
+                letterSpacing: 2,
+            }).setOrigin(0.5).setDepth(161);
+
+            // Flash the warning stripe
+            this.tweens.add({
+                targets: [stripeBg, warningText],
+                alpha: 0.3,
+                yoyo: true,
+                repeat: 3,
+                duration: 200,
+            });
+
+            // Screen shake during warning
+            this.cameras.main.shake(800, 0.008);
+
+            // --- Phase 3: Cleanup warning, spawn boss ---
+            this.time.delayedCall(2000, () => {
+                // Fade out warning elements
+                this.tweens.add({
+                    targets: [darkOverlay, stripeBg, warningText],
+                    alpha: 0,
+                    duration: 400,
+                    onComplete: () => {
+                        darkOverlay.destroy();
+                        stripeBg.destroy();
+                        warningText.destroy();
+                    }
+                });
+
+                // Slide out cinematic bars
+                this.tweens.add({ targets: barTop, y: -barHeight, duration: 400, ease: "Quad.easeIn", onComplete: () => barTop.destroy() });
+                this.tweens.add({ targets: barBottom, y: height, duration: 400, ease: "Quad.easeIn", onComplete: () => barBottom.destroy() });
+
+                // Red-tinted background overlay for boss fight
+                this.bossBgOverlay = this.add.rectangle(0, 0, width, height, 0xff0000, 0.08).setOrigin(0, 0).setDepth(0);
+
+                // Red border bars (persistent during boss fight)
+                this.bossBorderTop = this.add.rectangle(0, 0, width, 3, 0xff0000).setOrigin(0, 0).setDepth(95);
+                this.bossBorderBottom = this.add.rectangle(0, height - 3, width, 3, 0xff0000).setOrigin(0, 0).setDepth(95);
+                // Pulsing border
+                this.tweens.add({ targets: [this.bossBorderTop, this.bossBorderBottom], alpha: 0.3, yoyo: true, repeat: -1, duration: 800 });
+
+                // Spawn the boss
+                const yPos = height - 80;
+                const bossConfig: ObstacleConfig = {
+                    type: "boss",
+                    hp: 300,
+                    damage: 50,
+                    speed: this.scrollSpeed * 0.4,
+                    sprite: "boss"
+                };
+                this.bossMaxHp = bossConfig.hp;
+
+                const boss = new Obstacle(this, width + 80, yPos, bossConfig);
+                boss.setScale(1.8);
+                this.obstacles.add(boss);
+
+                const body = boss.body as Phaser.Physics.Arcade.Body;
+                if (body) {
+                    body.setVelocityX(-bossConfig.speed);
+                    body.setSize(boss.width * 0.7, boss.height * 0.8);
+                }
+
+                this.currentBoss = boss;
+                this.bossActive = true;
+
+                // Boss entrance shake
+                this.cameras.main.shake(300, 0.012);
+
+                // HP bar
+                this.bossHpBarBg = this.add.rectangle(boss.x, boss.y - 70, 120, 10, 0x333333).setOrigin(0.5).setDepth(90);
+                this.bossHpBar = this.add.rectangle(boss.x, boss.y - 70, 120, 10, 0xff0000).setOrigin(0.5).setDepth(91);
+            });
         });
     }
 
@@ -651,38 +717,48 @@ export class GameScene extends Phaser.Scene {
     private onBossDefeated() {
         const { width, height } = this.scale;
 
-        // Victory text
-        const victory = this.add.text(width / 2, height / 2 - 40, "🎉 BOSS DEFEATED!", {
-            fontSize: "32px",
-            color: "#ffff00",
-            fontStyle: "bold",
-            stroke: "#000000",
-            strokeThickness: 4
-        }).setOrigin(0.5).setDepth(100);
-
-        this.tweens.add({
-            targets: victory,
-            alpha: 0,
-            y: victory.y - 30,
-            duration: 2000,
-            onComplete: () => victory.destroy()
-        });
-
         // Bonus score
         const bonus = 3000;
         this.score += bonus;
-        this.createScoreText(width / 2, height / 2, bonus);
-        GameEventBus.emit("score-update", Math.floor(this.score));
+
+        // Stop gameplay
+        this.physics.pause();
+        this.spawnEvent.remove();
+        this.mpRegenEvent.remove();
+
+        // Victory flash
+        const flash = this.add.rectangle(0, 0, width, height, 0xffd700, 0.9).setOrigin(0, 0).setDepth(200);
+        this.tweens.add({
+            targets: flash,
+            alpha: 0,
+            duration: 800,
+        });
+
+        this.cameras.main.shake(400, 0.015);
 
         // Clean up HP bar
         if (this.bossHpBar) { this.bossHpBar.destroy(); this.bossHpBar = null; }
         if (this.bossHpBarBg) { this.bossHpBarBg.destroy(); this.bossHpBarBg = null; }
 
+        // Clean up boss fight overlays
+        this.cleanupBossOverlaysImmediate();
+
         this.bossActive = false;
         this.currentBoss = null;
 
-        // Resume normal spawning
-        if (this.spawnEvent) this.spawnEvent.paused = false;
+        // Transition to Victory scene after short delay
+        this.time.delayedCall(1200, () => {
+            this.scene.start("VictoryScene", {
+                score: Math.floor(this.score),
+                stage: this.stage,
+            });
+        });
+    }
+
+    private cleanupBossOverlaysImmediate() {
+        if (this.bossBgOverlay) { this.bossBgOverlay.destroy(); this.bossBgOverlay = null; }
+        if (this.bossBorderTop) { this.tweens.killTweensOf(this.bossBorderTop); this.bossBorderTop.destroy(); this.bossBorderTop = null; }
+        if (this.bossBorderBottom) { this.tweens.killTweensOf(this.bossBorderBottom); this.bossBorderBottom.destroy(); this.bossBorderBottom = null; }
     }
 
     private onHit(player: Phaser.GameObjects.GameObject, obj: Phaser.GameObjects.GameObject) {
@@ -766,6 +842,9 @@ export class GameScene extends Phaser.Scene {
         // Clean up boss state
         if (this.bossHpBar) { this.bossHpBar.destroy(); this.bossHpBar = null; }
         if (this.bossHpBarBg) { this.bossHpBarBg.destroy(); this.bossHpBarBg = null; }
+        if (this.bossBgOverlay) { this.bossBgOverlay.destroy(); this.bossBgOverlay = null; }
+        if (this.bossBorderTop) { this.bossBorderTop.destroy(); this.bossBorderTop = null; }
+        if (this.bossBorderBottom) { this.bossBorderBottom.destroy(); this.bossBorderBottom = null; }
         this.bossActive = false;
         this.currentBoss = null;
 
