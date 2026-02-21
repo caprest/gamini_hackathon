@@ -1,4 +1,4 @@
-export type WeaponType = "melee" | "ranged" | "magic";
+export type WeaponType = "melee" | "ranged" | "magic" | "heal";
 export type WeaponRange = "short" | "medium" | "long";
 export type Element = "fire" | "ice" | "thunder" | "wind" | "earth" | "light" | "dark" | "none";
 export type AttackAnimation = "slash" | "slash_wide" | "thrust" | "projectile" | "explosion" | "beam";
