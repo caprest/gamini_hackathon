@@ -6,5 +6,27 @@
   "speedIncreaseRate": 10,
   "spawnInterval": 1500,
   "bareHandDamage": 5,
-  "meleeRecoveryMs": 100
+  "meleeRecoveryMs": 100,
+  "obstacles": {
+    "cactus_small": {
+      "hp": 10,
+      "damage": 20
+    },
+    "cactus_large": {
+      "hp": 30,
+      "damage": 30
+    },
+    "pteranodon": {
+      "hp": 20,
+      "damage": 25
+    },
+    "dino_updown": {
+      "hp": 1,
+      "damage": 40
+    },
+    "dino_leftright": {
+      "hp": 1,
+      "damage": 40
+    }
+  }
 }

@@ -195,15 +195,15 @@ export class GameScene extends Phaser.Scene {
         let config: ObstacleConfig;
 
         if (rand < 0.4) {
-            config = { type: "cactus_small", hp: 10, damage: 20, speed: this.scrollSpeed, sprite: "cactus_small" };
+            config = { type: "cactus_small", hp: DEFAULT_GAME_CONFIG.obstacles["cactus_small"].hp, damage: DEFAULT_GAME_CONFIG.obstacles["cactus_small"].damage, speed: this.scrollSpeed, sprite: "cactus_small" };
         } else if (rand < 0.6) {
-            config = { type: "cactus_large", hp: 30, damage: 30, speed: this.scrollSpeed, sprite: "cactus_large" };
+            config = { type: "cactus_large", hp: DEFAULT_GAME_CONFIG.obstacles["cactus_large"].hp, damage: DEFAULT_GAME_CONFIG.obstacles["cactus_large"].damage, speed: this.scrollSpeed, sprite: "cactus_large" };
         } else if (rand < 0.75) {
-            config = { type: "pteranodon", hp: 20, damage: 25, speed: this.scrollSpeed * 1.5, sprite: "pteranodon" };
+            config = { type: "pteranodon", hp: DEFAULT_GAME_CONFIG.obstacles["pteranodon"].hp, damage: DEFAULT_GAME_CONFIG.obstacles["pteranodon"].damage, speed: this.scrollSpeed * 1.5, sprite: "pteranodon" };
         } else if (rand < 0.88) {
-            config = { type: "dino_updown", hp: 1, damage: 40, speed: this.scrollSpeed * 1.2, sprite: "dino_updown" };
+            config = { type: "dino_updown", hp: DEFAULT_GAME_CONFIG.obstacles["dino_updown"].hp, damage: DEFAULT_GAME_CONFIG.obstacles["dino_updown"].damage, speed: this.scrollSpeed * 1.2, sprite: "dino_updown" };
         } else {
-            config = { type: "dino_leftright", hp: 1, damage: 40, speed: this.scrollSpeed, sprite: "dino_leftright" };
+            config = { type: "dino_leftright", hp: DEFAULT_GAME_CONFIG.obstacles["dino_leftright"].hp, damage: DEFAULT_GAME_CONFIG.obstacles["dino_leftright"].damage, speed: this.scrollSpeed, sprite: "dino_leftright" };
         }
 
         let obsY = yPos;

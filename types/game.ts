@@ -46,6 +46,7 @@ export interface GameConfig {
   spawnInterval: number;   // ms
   bareHandDamage: number;
   meleeRecoveryMs: number; // 近接攻撃後の硬直時間
+  obstacles: Record<string, { hp: number; damage: number }>;
 }
 
 const toFiniteNumber = (value: unknown, fallback: number): number => {
@@ -63,4 +64,11 @@ export const DEFAULT_GAME_CONFIG: GameConfig = {
   spawnInterval: toFiniteNumber(gameBalance.spawnInterval, 1500),
   bareHandDamage: toFiniteNumber(gameBalance.bareHandDamage, 5),
   meleeRecoveryMs: toFiniteNumber(gameBalance.meleeRecoveryMs, 100),
+  obstacles: gameBalance.obstacles || {
+    "cactus_small": { hp: 10, damage: 20 },
+    "cactus_large": { hp: 30, damage: 30 },
+    "pteranodon": { hp: 20, damage: 25 },
+    "dino_updown": { hp: 1, damage: 40 },
+    "dino_leftright": { hp: 1, damage: 40 }
+  }
 };
