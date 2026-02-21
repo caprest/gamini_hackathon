@@ -9,6 +9,7 @@ type Phase = "idle" | "processing" | "preview" | "generating";
 export function CameraCapture() {
     const [phase, setPhase] = useState<Phase>("idle");
     const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+    const [spriteUrl, setSpriteUrl] = useState<string | null>(null);
     const [progress, setProgress] = useState("");
     const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -20,8 +21,9 @@ export function CameraCapture() {
         setProgress("背景を除去中...");
 
         try {
-            const dataUrl = await processWeaponImage(file);
-            setPreviewUrl(dataUrl);
+            const { apiImage, spriteImage } = await processWeaponImage(file);
+            setPreviewUrl(apiImage);
+            setSpriteUrl(spriteImage);
             setPhase("preview");
         } catch (err) {
             console.error("Image processing failed:", err);
@@ -29,8 +31,12 @@ export function CameraCapture() {
             setProgress("背景除去に失敗。元画像を使用...");
             try {
                 const { resizeToGameSprite } = await import("@/lib/imageProcessor");
-                const dataUrl = await resizeToGameSprite(file, 48);
-                setPreviewUrl(dataUrl);
+                const [apiImage, spriteImage] = await Promise.all([
+                    resizeToGameSprite(file, 512),
+                    resizeToGameSprite(file, 48),
+                ]);
+                setPreviewUrl(apiImage);
+                setSpriteUrl(spriteImage);
                 setPhase("preview");
             } catch {
                 setPhase("idle");
@@ -57,7 +63,7 @@ export function CameraCapture() {
 
             if (res.ok) {
                 const weaponData = await res.json();
-                weaponData.image_url = previewUrl;
+                weaponData.image_url = spriteUrl;
                 GameEventBus.emit("weapon-ready", weaponData);
             } else {
                 console.error("Failed to generate weapon from image:", res.status);
@@ -73,7 +79,7 @@ export function CameraCapture() {
                     attack_animation: "slash",
                     description: "撮影に失敗した武器",
                     uniqueness_score: 10,
-                    image_url: previewUrl,
+                    image_url: spriteUrl,
                 });
             }
         } catch (err) {
@@ -81,18 +87,21 @@ export function CameraCapture() {
         } finally {
             setPhase("idle");
             setPreviewUrl(null);
+            setSpriteUrl(null);
         }
     };
 
     const handleRetry = () => {
         setPhase("idle");
         setPreviewUrl(null);
+        setSpriteUrl(null);
         fileInputRef.current?.click();
     };
 
     const handleCancel = () => {
         setPhase("idle");
         setPreviewUrl(null);
+        setSpriteUrl(null);
     };
 
     if (phase === "processing") {

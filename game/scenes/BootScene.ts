@@ -30,9 +30,9 @@ export class BootScene extends Phaser.Scene {
 
         // Create simple ground texture
         const groundGraphics = this.make.graphics({ x: 0, y: 0 });
-        groundGraphics.fillStyle(0xdddddd, 1);
+        groundGraphics.fillStyle(0xC4A265, 1);
         groundGraphics.fillRect(0, 0, 32, 32);
-        groundGraphics.fillStyle(0xbbbbbb, 1);
+        groundGraphics.fillStyle(0x8B7242, 1);
         groundGraphics.fillRect(0, 0, 16, 16);
         groundGraphics.fillRect(16, 16, 16, 16);
         groundGraphics.generateTexture("ground", 32, 32);
