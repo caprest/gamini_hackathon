@@ -2,6 +2,50 @@
 
 import { useState } from "react";
 import { GameEventBus } from "@/game/EventBus";
+import { WeaponData } from "@/types/game";
+
+function sanitizeWeaponData(input: unknown): WeaponData {
+    const data = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
+    const asText = (value: unknown, fallback: string) => {
+        const text = String(value ?? "").trim();
+        return text || fallback;
+    };
+    const asNum = (value: unknown, fallback: number, min?: number, max?: number) => {
+        const n = Number(value);
+        if (!Number.isFinite(n)) return fallback;
+        const rounded = Math.round(n);
+        if (min !== undefined && rounded < min) return min;
+        if (max !== undefined && rounded > max) return max;
+        return rounded;
+    };
+    const pick = <T extends string>(value: unknown, allowed: readonly T[], fallback: T): T => {
+        const v = asText(value, fallback);
+        return allowed.includes(v as T) ? (v as T) : fallback;
+    };
+
+    const type = pick(data.type, ["melee", "ranged", "magic"] as const, "melee");
+    const range = pick(data.range, ["short", "medium", "long"] as const, "short");
+    const element = pick(data.element, ["fire", "ice", "thunder", "wind", "earth", "light", "dark", "none"] as const, "none");
+    const attack_animation = pick(
+        data.attack_animation,
+        ["slash", "slash_wide", "thrust", "projectile", "explosion", "beam"] as const,
+        "slash"
+    );
+
+    return {
+        weapon_name: asText(data.weapon_name, "予備武器"),
+        type,
+        damage: asNum(data.damage, 20, 1, 999),
+        mp_cost: asNum(data.mp_cost, 8, 0, 999),
+        range,
+        element,
+        sprite_emoji: asText(data.sprite_emoji, "🗡️"),
+        color: /^#[0-9A-Fa-f]{6}$/.test(asText(data.color, "")) ? asText(data.color, "#4B5563") : "#4B5563",
+        attack_animation,
+        description: asText(data.description, "生成武器"),
+        uniqueness_score: asNum(data.uniqueness_score, 20, 0, 100),
+    };
+}
 
 export function InputArea() {
     const [text, setText] = useState("");
@@ -24,7 +68,9 @@ export function InputArea() {
 
             if (res.ok) {
                 const weaponData = await res.json();
-                GameEventBus.emit("weapon-ready", weaponData);
+                const sanitized = sanitizeWeaponData(weaponData);
+                console.warn("[weapon-debug] InputArea emit weapon-ready", sanitized);
+                GameEventBus.emit("weapon-ready", sanitized);
             } else {
                 const raw = await res.text().catch(() => "");
                 const contentType = res.headers.get("content-type") || "unknown";
@@ -64,7 +110,10 @@ export function InputArea() {
     };
 
     const startVoiceRecognition = () => {
-        const win = window as any;
+        const win = window as Window & {
+            SpeechRecognition?: new () => SpeechRecognition;
+            webkitSpeechRecognition?: new () => SpeechRecognition;
+        };
         const SpeechRecognition = win.SpeechRecognition || win.webkitSpeechRecognition;
         if (!SpeechRecognition) {
             alert("お使いのブラウザは音声認識に対応していません。");
