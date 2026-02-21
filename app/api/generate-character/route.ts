@@ -25,7 +25,9 @@ export async function POST(req: NextRequest) {
             },
             body: JSON.stringify({
                 contents: [{
-                    parts: [{ text: `pixel art style, 32x32 sprite, side view, game character, ${description}, dinosaur character, solid white background, retro game style` }]
+                    parts: [{
+                        text: `pixel art style, 32x32 sprite, side view facing right, game character, ${description}, dinosaur character, solid white background, retro game style, no text, no letters, no logo, no watermark`
+                    }]
                 }]
             }),
         });

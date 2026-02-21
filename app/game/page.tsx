@@ -5,6 +5,7 @@ import GameOverlay from "@/components/game/GameOverlay";
 import { WeaponDisplay } from "@/components/ui/WeaponDisplay";
 import { InputArea } from "@/components/ui/InputArea";
 import { CameraCapture } from "@/components/ui/CameraCapture";
+import { BossSettings } from "@/components/ui/BossSettings";
 import Link from "next/link";
 import { Suspense } from "react";
 
@@ -21,6 +22,10 @@ export default function GamePage() {
                 <Link href="/" className="text-slate-400 hover:text-white transition-colors">
                     ← タイトルに戻る
                 </Link>
+            </div>
+
+            <div className="w-full max-w-[800px] mb-3">
+                <BossSettings />
             </div>
 
             <div className="relative w-full max-w-[800px]">

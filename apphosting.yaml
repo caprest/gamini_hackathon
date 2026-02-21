@@ -13,3 +13,5 @@ env:
   # See https://firebase.google.com/docs/app-hosting/configure#secret-parameters
   - variable: GEMINI_API_KEY
     secret: gemini-api-key
+  - variable: BANANA_API_KEY
+    secret: banana-api-key
