@@ -3,13 +3,15 @@ import { GameEventBus } from "../EventBus";
 
 export class GameOverScene extends Phaser.Scene {
     private finalScore: number = 0;
+    private cleared: boolean = false;
 
     constructor() {
         super("GameOverScene");
     }
 
-    init(data: { score: number }) {
+    init(data: { score: number; cleared?: boolean }) {
         this.finalScore = data.score || 0;
+        this.cleared = Boolean(data.cleared);
     }
 
     create() {
@@ -18,10 +20,11 @@ export class GameOverScene extends Phaser.Scene {
         // Dark overlay
         this.add.rectangle(0, 0, width, height, 0x000000, 0.7).setOrigin(0, 0);
 
-        // Game Over Text
-        this.add.text(width / 2, height / 3, "GAME OVER", {
+        const title = this.cleared ? "GAME CLEAR" : "GAME OVER";
+        const titleColor = this.cleared ? "#22c55e" : "#ff0000";
+        this.add.text(width / 2, height / 3, title, {
             fontSize: "64px",
-            color: "#ff0000",
+            color: titleColor,
             fontStyle: "bold",
         }).setOrigin(0.5);
 

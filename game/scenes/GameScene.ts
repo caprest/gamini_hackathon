@@ -48,6 +48,7 @@ export class GameScene extends Phaser.Scene {
     private bossHpBarBg: Phaser.GameObjects.Rectangle | null = null;
     private bossMaxHp: number = 150;
     private gameElapsedSec: number = 0;
+    private bossDefeated: boolean = false;
     private bossBgOverlay: Phaser.GameObjects.Rectangle | null = null;
     private bossBorderTop: Phaser.GameObjects.Rectangle | null = null;
     private bossBorderBottom: Phaser.GameObjects.Rectangle | null = null;
@@ -103,6 +104,7 @@ export class GameScene extends Phaser.Scene {
         this.bossHpBar = null;
         this.bossHpBarBg = null;
         this.gameElapsedSec = 0;
+        this.bossDefeated = false;
         this.bossAttackEvent = null;
         this.bossBeamHitCount = 0;
         this.bossStopped = false;
@@ -565,11 +567,14 @@ export class GameScene extends Phaser.Scene {
 
         this.physics.overlap(hitbox, this.obstacles, (hit, obs) => {
             const obstacle = obs as Obstacle;
+            if (!obstacle.active) return;
+
+            const hpBeforeHit = obstacle.config.hp;
             const killed = obstacle.takeDamage(damage);
             if (killed) {
                 const isBoss = obstacle.config.type === "boss";
                 if (!isBoss) {
-                    const pts = obstacle.config.hp * 10;
+                    const pts = Math.max(0, hpBeforeHit) * 10;
                     this.score += pts;
                     this.createScoreText(obstacle.x, obstacle.y, pts);
                 }
@@ -852,6 +857,9 @@ export class GameScene extends Phaser.Scene {
     }
 
     private onBossDefeated() {
+        if (this.bossDefeated) return;
+        this.bossDefeated = true;
+
         const { width, height } = this.scale;
 
         // Bonus score
@@ -1113,7 +1121,7 @@ export class GameScene extends Phaser.Scene {
         this.currentBoss = null;
 
         this.time.delayedCall(1000, () => {
-            this.scene.start("GameOverScene", { score: Math.floor(this.score) });
+            this.scene.start("GameOverScene", { score: Math.floor(this.score), cleared: false });
         });
     }
 
