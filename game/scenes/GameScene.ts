@@ -19,6 +19,7 @@ export class GameScene extends Phaser.Scene {
     private chargeEffect: Phaser.GameObjects.Particles.ParticleEmitter | null = null;
     private spawnEvent!: Phaser.Time.TimerEvent;
     private mpRegenEvent!: Phaser.Time.TimerEvent;
+    private heldWeaponSprite: Phaser.GameObjects.Image | Phaser.GameObjects.Text | null = null;
 
     constructor() {
         super("GameScene");
@@ -26,6 +27,13 @@ export class GameScene extends Phaser.Scene {
 
     create() {
         const { width, height } = this.scale;
+
+        // Clean up previous held weapon
+        if (this.heldWeaponSprite) {
+            this.heldWeaponSprite.destroy();
+            this.heldWeaponSprite = null;
+        }
+        this.currentWeapon = null;
 
         // Reset stats
         this.score = 0;
@@ -160,6 +168,29 @@ export class GameScene extends Phaser.Scene {
             this.chargeEffect = null;
         }
 
+        // Destroy previous held weapon sprite
+        if (this.heldWeaponSprite) {
+            this.heldWeaponSprite.destroy();
+            this.heldWeaponSprite = null;
+        }
+
+        // Create held weapon display next to player
+        const textureKey = weaponData.image_url ? "weapon_" + weaponData.weapon_name : null;
+        if (textureKey && this.textures.exists(textureKey)) {
+            this.heldWeaponSprite = this.add.image(
+                this.player.x + 20,
+                this.player.y - 5,
+                textureKey
+            ).setOrigin(0.5).setDisplaySize(32, 32);
+        } else {
+            this.heldWeaponSprite = this.add.text(
+                this.player.x + 20,
+                this.player.y - 5,
+                weaponData.sprite_emoji,
+                { fontSize: "24px" }
+            ).setOrigin(0.5);
+        }
+
         // Create "READY!" text
         const text = this.add.text(this.player.x, this.player.y - 40, "READY!", {
             fontSize: "16px",
@@ -254,6 +285,10 @@ export class GameScene extends Phaser.Scene {
 
             GameEventBus.emit("attack-executed", this.currentWeapon);
             this.currentWeapon = null; // Magic is consumed
+            if (this.heldWeaponSprite) {
+                this.heldWeaponSprite.destroy();
+                this.heldWeaponSprite = null;
+            }
             return;
         }
 
@@ -271,6 +306,10 @@ export class GameScene extends Phaser.Scene {
 
         if (this.currentWeapon.type === "magic") {
             this.currentWeapon = null; // Magic is consumed
+            if (this.heldWeaponSprite) {
+                this.heldWeaponSprite.destroy();
+                this.heldWeaponSprite = null;
+            }
         }
     }
 
@@ -426,6 +465,11 @@ export class GameScene extends Phaser.Scene {
                     loop: true,
                 });
             }
+        }
+
+        // Follow player with held weapon sprite
+        if (this.heldWeaponSprite) {
+            this.heldWeaponSprite.setPosition(this.player.x + 20, this.player.y - 5);
         }
 
         // Cleanup offscreen objects

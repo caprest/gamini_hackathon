@@ -124,10 +124,8 @@ export function InputArea() {
     };
 
     const startVoiceRecognition = () => {
-        const win = window as Window & {
-            SpeechRecognition?: new () => SpeechRecognition;
-            webkitSpeechRecognition?: new () => SpeechRecognition;
-        };
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const win = window as any;
         const SpeechRecognition = win.SpeechRecognition || win.webkitSpeechRecognition;
         if (!SpeechRecognition) {
             alert("お使いのブラウザは音声認識に対応していません。");
@@ -164,7 +162,7 @@ export function InputArea() {
     };
 
     return (
-        <div className="w-full max-w-[800px] mt-4 flex flex-col gap-2">
+        <div className="w-full flex flex-col gap-2">
             <div className="flex bg-slate-200 p-1 rounded-lg self-start">
                 <button
                     type="button"
