@@ -1,5 +1,91 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GoogleGenerativeAI, SchemaType } from "@google/generative-ai";
 import { NextRequest, NextResponse } from "next/server";
+
+export const runtime = "nodejs";
+
+const WEAPON_RESPONSE_SCHEMA = {
+    type: SchemaType.OBJECT,
+    properties: {
+        weapon_name: { type: SchemaType.STRING },
+        type: { type: SchemaType.STRING, enum: ["melee", "ranged", "magic"] },
+        damage: { type: SchemaType.NUMBER },
+        mp_cost: { type: SchemaType.NUMBER },
+        range: { type: SchemaType.STRING, enum: ["short", "medium", "long"] },
+        element: { type: SchemaType.STRING, enum: ["fire", "ice", "thunder", "wind", "earth", "light", "dark", "none"] },
+        sprite_emoji: { type: SchemaType.STRING },
+        color: { type: SchemaType.STRING },
+        attack_animation: { type: SchemaType.STRING, enum: ["slash", "slash_wide", "thrust", "projectile", "explosion", "beam"] },
+        description: { type: SchemaType.STRING },
+        uniqueness_score: { type: SchemaType.NUMBER },
+    },
+    required: [
+        "weapon_name",
+        "type",
+        "damage",
+        "mp_cost",
+        "range",
+        "element",
+        "sprite_emoji",
+        "color",
+        "attack_animation",
+        "description",
+        "uniqueness_score",
+    ],
+} as const;
+
+type WeaponPayload = {
+    weapon_name: string;
+    type: "melee" | "ranged" | "magic";
+    damage: number;
+    mp_cost: number;
+    range: "short" | "medium" | "long";
+    element: "fire" | "ice" | "thunder" | "wind" | "earth" | "light" | "dark" | "none";
+    sprite_emoji: string;
+    color: string;
+    attack_animation: "slash" | "slash_wide" | "thrust" | "projectile" | "explosion" | "beam";
+    description: string;
+    uniqueness_score: number;
+};
+
+function tryParseWeaponJson(raw: string): WeaponPayload {
+    const trimmed = raw.trim();
+    const fenceMatch = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
+    const candidates = [
+        trimmed,
+        fenceMatch?.[1]?.trim() || "",
+        trimmed.replace(/^```(?:json)?/i, "").replace(/```$/i, "").trim(),
+    ].filter(Boolean);
+
+    for (const candidate of candidates) {
+        try {
+            return JSON.parse(candidate) as WeaponPayload;
+        } catch {
+            const match = candidate.match(/\{[\s\S]*\}/);
+            if (match) {
+                return JSON.parse(match[0]) as WeaponPayload;
+            }
+        }
+    }
+
+    throw new Error(`Model returned non-JSON output: ${raw.slice(0, 200)}`);
+}
+
+function fallbackWeapon(userInput: string): WeaponPayload {
+    const label = userInput.trim().slice(0, 10) || "ことば";
+    return {
+        weapon_name: `${label}の剣`,
+        type: "melee",
+        damage: 25,
+        mp_cost: 8,
+        range: "short",
+        element: "none",
+        sprite_emoji: "🗡️",
+        color: "#4B5563",
+        attack_animation: "slash",
+        description: "安定した予備武器",
+        uniqueness_score: 20,
+    };
+}
 
 export async function POST(req: NextRequest) {
     try {
@@ -9,11 +95,13 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: "No input provided" }, { status: 400 });
         }
 
-        if (!process.env.GEMINI_API_KEY) {
+        const apiKey = process.env.GEMINI_API_KEY?.trim();
+        if (!apiKey) {
             return NextResponse.json({ error: "Gemini API key is missing" }, { status: 500 });
         }
 
-        const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+        const genAI = new GoogleGenerativeAI(apiKey);
+        const modelName = process.env.GEMINI_MODEL?.trim() || "gemini-2.5-flash";
 
         const WEAPON_SYSTEM_PROMPT = `あなたはファンタジーゲーム「ノージャンプダイナソー」の武器デザイナーAIです。
 プレイヤーの入力テキストを元に、ゲーム内で使用可能な武器/魔法を1つ生成してください。
@@ -40,24 +128,50 @@ export async function POST(req: NextRequest) {
 }`;
 
         const model = genAI.getGenerativeModel({
-            model: "gemini-2.5-flash",
+            model: modelName,
             generationConfig: {
                 temperature: 0.9,
                 maxOutputTokens: 300,
                 responseMimeType: "application/json",
+                responseSchema: WEAPON_RESPONSE_SCHEMA,
             },
         });
 
-        const result = await model.generateContent([
-            { text: WEAPON_SYSTEM_PROMPT },
-            { text: `プレイヤーの入力: "${userInput}"` },
-        ]);
+        const prompts = [
+            [
+                { text: WEAPON_SYSTEM_PROMPT },
+                { text: `プレイヤーの入力: "${userInput}"` },
+            ],
+            [
+                { text: WEAPON_SYSTEM_PROMPT },
+                { text: `プレイヤーの入力: "${userInput}"` },
+                {
+                    text: "必ずJSONオブジェクト1つだけを返してください。前置き・解説・Markdownコードブロックは禁止です。出力の先頭文字は {、末尾文字は } にしてください。",
+                },
+            ],
+        ];
 
-        const weaponData = JSON.parse(result.response.text());
-        return NextResponse.json(weaponData);
+        for (const content of prompts) {
+            const result = await model.generateContent(content);
+            const raw = result.response.text();
+            try {
+                const weaponData = tryParseWeaponJson(raw);
+                return NextResponse.json(weaponData);
+            } catch (parseError) {
+                console.warn("Gemini JSON parse retry:", parseError);
+            }
+        }
 
-    } catch (error: any) {
+        return NextResponse.json(fallbackWeapon(userInput));
+
+    } catch (error: unknown) {
         console.error("Gemini API Error:", error);
-        return NextResponse.json({ error: "Failed to generate weapon" }, { status: 500 });
+        const maybeError = error as { status?: unknown; code?: unknown; message?: unknown };
+        const status = Number(maybeError?.status) || Number(maybeError?.code) || 500;
+        const details = String(maybeError?.message || "Unknown Gemini API error");
+        const isAuthError = status === 401 || status === 403;
+        const safeStatus = isAuthError ? status : 500;
+        const safeError = isAuthError ? "Gemini authentication failed" : "Failed to generate weapon";
+        return NextResponse.json({ error: safeError, details }, { status: safeStatus });
     }
 }

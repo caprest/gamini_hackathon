@@ -26,7 +26,21 @@ export function InputArea() {
                 const weaponData = await res.json();
                 GameEventBus.emit("weapon-ready", weaponData);
             } else {
-                console.error("Failed to generate weapon");
+                const raw = await res.text().catch(() => "");
+                const contentType = res.headers.get("content-type") || "unknown";
+                const compactRaw = raw.replace(/\s+/g, " ").slice(0, 300);
+                let details = compactRaw || "(empty body)";
+                if (raw) {
+                    try {
+                        const parsed = JSON.parse(raw) as Record<string, unknown>;
+                        details = JSON.stringify(parsed);
+                    } catch {
+                        // Keep raw text snippet when body is not JSON.
+                    }
+                }
+                console.error(
+                    `Failed to generate weapon: status=${res.status} statusText=${res.statusText} contentType=${contentType} details=${details}`
+                );
                 GameEventBus.emit("weapon-ready", {
                     weapon_name: "失敗作の剣",
                     type: "melee",
