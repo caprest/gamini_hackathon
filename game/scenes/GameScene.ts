@@ -581,7 +581,21 @@ export class GameScene extends Phaser.Scene {
         this.physics.pause();
         this.spawnEvent.remove();
         this.mpRegenEvent.remove();
-        this.player.setTint(0x555555);
+
+        // Remove inventory sprites so no icon/background artifact remains above the player on death.
+        this.weaponSprites.forEach((sprite) => sprite.destroy());
+        this.magicSprites.forEach((sprite) => sprite.destroy());
+        this.weaponSprites = [];
+        this.magicSprites = [];
+
+        this.player.clearTint();
+        this.tweens.killTweensOf(this.player);
+        this.tweens.add({
+            targets: this.player,
+            alpha: 0.6,
+            duration: 250,
+            ease: "Quad.easeOut",
+        });
 
         this.time.delayedCall(1000, () => {
             this.scene.start("GameOverScene", { score: Math.floor(this.score) });
