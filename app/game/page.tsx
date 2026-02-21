@@ -4,6 +4,7 @@ import dynamic from "next/dynamic";
 import GameOverlay from "@/components/game/GameOverlay";
 import { WeaponDisplay } from "@/components/ui/WeaponDisplay";
 import { InputArea } from "@/components/ui/InputArea";
+import { CameraCapture } from "@/components/ui/CameraCapture";
 import Link from "next/link";
 import { Suspense } from "react";
 
@@ -34,7 +35,14 @@ export default function GamePage() {
                 <WeaponDisplay />
             </div>
 
-            <InputArea />
+            <div className="w-full max-w-[800px] mt-4 flex gap-2 items-start">
+                <div className="flex-1">
+                    <InputArea />
+                </div>
+                <div className="pt-0">
+                    <CameraCapture />
+                </div>
+            </div>
         </main>
     );
 }

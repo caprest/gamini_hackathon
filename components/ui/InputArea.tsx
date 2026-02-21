@@ -2,6 +2,52 @@
 
 import { useState, useEffect } from "react";
 import { GameEventBus } from "@/game/EventBus";
+import { WeaponData } from "@/types/game";
+
+function sanitizeWeaponData(input: unknown): WeaponData {
+    const data = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
+    const asText = (value: unknown, fallback: string) => {
+        const text = String(value ?? "").trim();
+        return text || fallback;
+    };
+    const asNum = (value: unknown, fallback: number, min?: number, max?: number) => {
+        const n = Number(value);
+        if (!Number.isFinite(n)) return fallback;
+        const rounded = Math.round(n);
+        if (min !== undefined && rounded < min) return min;
+        if (max !== undefined && rounded > max) return max;
+        return rounded;
+    };
+    const pick = <T extends string>(value: unknown, allowed: readonly T[], fallback: T): T => {
+        const v = asText(value, fallback);
+        return allowed.includes(v as T) ? (v as T) : fallback;
+    };
+
+    const type = pick(data.type, ["melee", "ranged", "magic"] as const, "melee");
+    const range = pick(data.range, ["short", "medium", "long"] as const, "short");
+    const element = pick(data.element, ["fire", "ice", "thunder", "wind", "earth", "light", "dark", "none"] as const, "none");
+    const attack_animation = pick(
+        data.attack_animation,
+        ["slash", "slash_wide", "thrust", "projectile", "explosion", "beam"] as const,
+        "slash"
+    );
+
+    return {
+        weapon_name: asText(data.weapon_name, "予備武器"),
+        type,
+        damage: asNum(data.damage, 20, 1, 999),
+        mp_cost: asNum(data.mp_cost, 8, 0, 999),
+        range,
+        element,
+        sprite_emoji: asText(data.sprite_emoji, "🗡️"),
+        color: /^#[0-9A-Fa-f]{6}$/.test(asText(data.color, "")) ? asText(data.color, "#4B5563") : "#4B5563",
+        attack_animation,
+        description: asText(data.description, "生成武器"),
+        uniqueness_score: asNum(data.uniqueness_score, 20, 0, 100),
+    };
+}
+
+const MAX_SLOTS = 3;
 
 export function InputArea() {
     const [text, setText] = useState("");
@@ -9,12 +55,20 @@ export function InputArea() {
     const [isListening, setIsListening] = useState(false);
     const [isMagicMode, setIsMagicMode] = useState(false); // false = Weapon, true = Magic
     const [mp, setMp] = useState(100);
+    const [weaponCount, setWeaponCount] = useState(0);
+    const [magicCount, setMagicCount] = useState(0);
 
     useEffect(() => {
         const handleMp = (val: number) => setMp(val);
+        const handleWeaponsUpdate = (data: { weapons: WeaponData[]; magics: WeaponData[] }) => {
+            setWeaponCount(data.weapons.length);
+            setMagicCount(data.magics.length);
+        };
         GameEventBus.on("mp-update", handleMp);
+        GameEventBus.on("weapons-update", handleWeaponsUpdate);
         return () => {
             GameEventBus.off("mp-update", handleMp);
+            GameEventBus.off("weapons-update", handleWeaponsUpdate);
         };
     }, []);
 
@@ -37,9 +91,25 @@ export function InputArea() {
 
             if (res.ok) {
                 const weaponData = await res.json();
-                GameEventBus.emit("weapon-ready", weaponData);
+                const sanitized = sanitizeWeaponData(weaponData);
+                console.warn("[weapon-debug] InputArea emit weapon-ready", sanitized);
+                GameEventBus.emit("weapon-ready", sanitized);
             } else {
-                console.error("Failed to generate weapon");
+                const raw = await res.text().catch(() => "");
+                const contentType = res.headers.get("content-type") || "unknown";
+                const compactRaw = raw.replace(/\s+/g, " ").slice(0, 300);
+                let details = compactRaw || "(empty body)";
+                if (raw) {
+                    try {
+                        const parsed = JSON.parse(raw) as Record<string, unknown>;
+                        details = JSON.stringify(parsed);
+                    } catch {
+                        // Keep raw text snippet when body is not JSON.
+                    }
+                }
+                console.error(
+                    `Failed to generate weapon: status=${res.status} statusText=${res.statusText} contentType=${contentType} details=${details}`
+                );
                 GameEventBus.emit("weapon-ready", {
                     weapon_name: "失敗作の剣",
                     type: "melee",
@@ -64,6 +134,7 @@ export function InputArea() {
     };
 
     const startVoiceRecognition = () => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const win = window as any;
         const SpeechRecognition = win.SpeechRecognition || win.webkitSpeechRecognition;
         if (!SpeechRecognition) {
@@ -101,7 +172,7 @@ export function InputArea() {
     };
 
     return (
-        <div className="w-full max-w-[800px] mt-4 flex flex-col gap-2">
+        <div className="w-full flex flex-col gap-2">
             <div className="flex bg-slate-200 p-1 rounded-lg self-start">
                 <button
                     type="button"
@@ -149,7 +220,9 @@ export function InputArea() {
                 </button>
             </form>
             <div className="text-xs text-slate-500 mt-2 ml-1">
-                ※生成されたらスペースキーで攻撃！
+                ※スペースキーで攻撃！1,2,3で選択 / Tabで武器⇔魔法切替
+                {!isMagicMode && weaponCount >= MAX_SLOTS && " | 武器満杯 (古い武器と入替)"}
+                {isMagicMode && magicCount >= MAX_SLOTS && " | 魔法満杯 (古い魔法と入替)"}
             </div>
         </div>
     );

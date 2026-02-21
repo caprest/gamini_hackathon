@@ -1,3 +1,5 @@
+import rawGameBalance from "../game/gameBalance.json";
+
 export type WeaponType = "melee" | "ranged" | "magic" | "heal";
 export type WeaponRange = "short" | "medium" | "long";
 export type Element = "fire" | "ice" | "thunder" | "wind" | "earth" | "light" | "dark" | "none";
@@ -43,14 +45,22 @@ export interface GameConfig {
   speedIncreaseRate: number;
   spawnInterval: number;   // ms
   bareHandDamage: number;
+  meleeRecoveryMs: number; // 近接攻撃後の硬直時間
 }
 
+const toFiniteNumber = (value: unknown, fallback: number): number => {
+  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+};
+
+const gameBalance = rawGameBalance as Partial<GameConfig>;
+
 export const DEFAULT_GAME_CONFIG: GameConfig = {
-  initialHP: 100,
-  initialMP: 100,
-  mpRegenRate: 2,
-  baseScrollSpeed: 200,
-  speedIncreaseRate: 10,
-  spawnInterval: 1500,
-  bareHandDamage: 5,
+  initialHP: toFiniteNumber(gameBalance.initialHP, 100),
+  initialMP: toFiniteNumber(gameBalance.initialMP, 100),
+  mpRegenRate: toFiniteNumber(gameBalance.mpRegenRate, 2),
+  baseScrollSpeed: toFiniteNumber(gameBalance.baseScrollSpeed, 200),
+  speedIncreaseRate: toFiniteNumber(gameBalance.speedIncreaseRate, 10),
+  spawnInterval: toFiniteNumber(gameBalance.spawnInterval, 1500),
+  bareHandDamage: toFiniteNumber(gameBalance.bareHandDamage, 5),
+  meleeRecoveryMs: toFiniteNumber(gameBalance.meleeRecoveryMs, 100),
 };
