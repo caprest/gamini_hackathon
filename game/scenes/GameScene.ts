@@ -23,6 +23,8 @@ export class GameScene extends Phaser.Scene {
     private chargeEffect: Phaser.GameObjects.Particles.ParticleEmitter | null = null;
     private spawnEvent!: Phaser.Time.TimerEvent;
     private mpRegenEvent!: Phaser.Time.TimerEvent;
+    private heldWeaponSprite: Phaser.GameObjects.Image | Phaser.GameObjects.Text | null = null;
+    private lastMeleeAttackAt: number = 0;
 
     constructor() {
         super("GameScene");
@@ -294,8 +296,15 @@ export class GameScene extends Phaser.Scene {
         const currentWeapon = this.weapons[this.activeWeaponIndex] ?? null;
 
         if (!currentWeapon) {
+        const now = this.time.now;
+        const isMeleeAttack = !this.currentWeapon || this.currentWeapon.type === "melee";
+        if (isMeleeAttack && now - this.lastMeleeAttackAt < DEFAULT_GAME_CONFIG.meleeRecoveryMs) {
+            return;
+        }
+
             // Barehand attack
             this.performAttack(DEFAULT_GAME_CONFIG.bareHandDamage, "short", "slash", 0xffffff, "⚡");
+            this.lastMeleeAttackAt = now;
             return;
         }
 
@@ -340,6 +349,9 @@ export class GameScene extends Phaser.Scene {
             currentWeapon.sprite_emoji,
             currentWeapon.image_url ? "weapon_" + currentWeapon.weapon_name : undefined
         );
+        if (this.currentWeapon.type === "melee") {
+            this.lastMeleeAttackAt = now;
+        }
 
         GameEventBus.emit("attack-executed", currentWeapon);
 
