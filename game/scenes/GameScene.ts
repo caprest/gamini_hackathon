@@ -286,20 +286,14 @@ export class GameScene extends Phaser.Scene {
             rangePx,
             100,
             tint,
-            0.5
+            0
         );
+        hitbox.setVisible(false);
         this.physics.add.existing(hitbox);
 
         const body = hitbox.body as Phaser.Physics.Arcade.Body;
         body.setAllowGravity(false);
-
-        // Flash effect
-        this.tweens.add({
-            targets: hitbox,
-            alpha: 0,
-            duration: 300,
-            onComplete: () => hitbox.destroy()
-        });
+        this.time.delayedCall(300, () => hitbox.destroy());
 
         // Add default emoji or generated image weapon visual
         let visual: Phaser.GameObjects.GameObject;
