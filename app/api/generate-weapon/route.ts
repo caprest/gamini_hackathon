@@ -397,11 +397,20 @@ export async function POST(req: NextRequest) {
     } catch (error: unknown) {
         console.error("Gemini API Error:", error);
         const maybeError = error as { status?: unknown; code?: unknown; message?: unknown };
+        const errorMessage = String(maybeError?.message || "");
         const status = Number(maybeError?.status) || Number(maybeError?.code) || 500;
-        const details = String(maybeError?.message || "Unknown Gemini API error");
+
+        // Rate limit (429) — return clear error so client can show a useful message
+        if (status === 429 || errorMessage.includes("429") || errorMessage.includes("Too Many Requests") || errorMessage.includes("quota")) {
+            return NextResponse.json(
+                { error: "rate_limit", details: "APIレート制限に達しました。しばらく待ってから再試行してください。" },
+                { status: 429 }
+            );
+        }
+
         const isAuthError = status === 401 || status === 403;
         const safeStatus = isAuthError ? status : 500;
         const safeError = isAuthError ? "Gemini authentication failed" : "Failed to generate weapon";
-        return NextResponse.json({ error: safeError, details }, { status: safeStatus });
+        return NextResponse.json({ error: safeError, details: errorMessage || "Unknown error" }, { status: safeStatus });
     }
 }
