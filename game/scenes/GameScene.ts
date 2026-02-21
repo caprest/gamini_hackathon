@@ -115,15 +115,26 @@ export class GameScene extends Phaser.Scene {
         const rand = Math.random();
         let config: ObstacleConfig;
 
-        if (rand < 0.6) {
+        if (rand < 0.4) {
             config = { type: "cactus_small", hp: 10, damage: 20, speed: this.scrollSpeed, sprite: "cactus_small" };
-        } else if (rand < 0.9) {
+        } else if (rand < 0.6) {
             config = { type: "cactus_large", hp: 30, damage: 30, speed: this.scrollSpeed, sprite: "cactus_large" };
-        } else {
+        } else if (rand < 0.75) {
             config = { type: "pteranodon", hp: 20, damage: 25, speed: this.scrollSpeed * 1.5, sprite: "pteranodon" };
+        } else if (rand < 0.88) {
+            config = { type: "dino_updown", hp: 1, damage: 40, speed: this.scrollSpeed * 1.2, sprite: "dino_updown" };
+        } else {
+            config = { type: "dino_leftright", hp: 1, damage: 40, speed: this.scrollSpeed, sprite: "dino_leftright" };
         }
 
-        const obsY = config.type === "pteranodon" ? height - 120 : yPos;
+        let obsY = yPos;
+        if (config.type === "pteranodon") {
+            obsY = height - 120;
+        } else if (config.type === "dino_updown") {
+            // Spawn higher so the wave doesn't dip into the ground
+            obsY = height - 150;
+        }
+
         const obstacle = new Obstacle(this, width + 50, obsY, config);
         this.obstacles.add(obstacle);
 
@@ -316,7 +327,7 @@ export class GameScene extends Phaser.Scene {
             this.tweens.add({
                 targets: visual,
                 x: this.player.x + rangePx,
-                duration: 500,
+                duration: 1000,
                 onComplete: () => visual.destroy()
             });
         } else {
@@ -326,7 +337,7 @@ export class GameScene extends Phaser.Scene {
                 angle: 180,
                 scale: targetScale,
                 alpha: 0,
-                duration: 300,
+                duration: textureKey && textureKey.startsWith("weapon_") ? 1000 : 300,
                 onComplete: () => visual.destroy()
             });
         }
@@ -427,11 +438,29 @@ export class GameScene extends Phaser.Scene {
             }
         }
 
-        // Cleanup offscreen objects
+        // Cleanup offscreen objects and process dynamic movement
         this.obstacles.getChildren().forEach(child => {
             const obs = child as Obstacle;
             if (obs.x < -100) {
                 obs.destroy();
+            } else {
+                // Moving scary dinosaurs logic
+                if (obs.config.type === "dino_updown") {
+                    const body = obs.body as Phaser.Physics.Arcade.Body;
+                    // Limit the downward sine wave so it doesn't clip into the ground
+                    const wave = Math.sin(time / 200) * 150;
+                    body.setVelocityY(wave);
+
+                    // Force minimum Y to ground level minus their height
+                    if (obs.y > this.scale.height - 40) {
+                        obs.y = this.scale.height - 40;
+                        body.setVelocityY(0);
+                    }
+                } else if (obs.config.type === "dino_leftright") {
+                    const body = obs.body as Phaser.Physics.Arcade.Body;
+                    // base speed + sine wave
+                    body.setVelocityX(-obs.config.speed + Math.sin(time / 150) * 150);
+                }
             }
         });
     }

@@ -28,7 +28,7 @@ export interface PlayerState {
 }
 
 export interface ObstacleConfig {
-  type: "cactus_small" | "cactus_large" | "fire_wall" | "spike" | "pteranodon" | "boss";
+  type: "cactus_small" | "cactus_large" | "fire_wall" | "spike" | "pteranodon" | "boss" | "dino_updown" | "dino_leftright";
   hp: number;
   damage: number;
   speed: number;
