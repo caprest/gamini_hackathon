@@ -57,6 +57,7 @@ export function InputArea() {
     const [mp, setMp] = useState(100);
     const [weaponCount, setWeaponCount] = useState(0);
     const [magicCount, setMagicCount] = useState(0);
+    const [rateLimitMsg, setRateLimitMsg] = useState("");
 
     useEffect(() => {
         const handleMp = (val: number) => setMp(val);
@@ -76,6 +77,7 @@ export function InputArea() {
         if (e) e.preventDefault();
         const cost = isMagicMode ? 30 : 20;
         if (!text.trim() || isGenerating || mp < cost) return;
+        setRateLimitMsg("");
 
         // Note: Actual MP handling is ideally checked before this, but for simplicity
         // we'll let GameScene handle the MP deduction when it hears 'weapon-request'.
@@ -94,6 +96,8 @@ export function InputArea() {
                 const sanitized = sanitizeWeaponData(weaponData);
                 console.warn("[weapon-debug] InputArea emit weapon-ready", sanitized);
                 GameEventBus.emit("weapon-ready", sanitized);
+            } else if (res.status === 429) {
+                setRateLimitMsg("APIレート制限に達しました。しばらく待ってから再試行してください。");
             } else {
                 const raw = await res.text().catch(() => "");
                 const contentType = res.headers.get("content-type") || "unknown";
@@ -219,6 +223,11 @@ export function InputArea() {
                     {isGenerating ? "生成中..." : mp < (isMagicMode ? 30 : 20) ? "MP不足" : "生成 (Enter)"}
                 </button>
             </form>
+            {rateLimitMsg && (
+                <div className="text-sm text-red-400 bg-red-950 border border-red-800 rounded-lg px-3 py-2 mt-2">
+                    {rateLimitMsg}
+                </div>
+            )}
             <div className="text-xs text-slate-500 mt-2 ml-1">
                 ※スペースキーで攻撃！1,2,3で武器選択 / 4,5,6で魔法選択
                 {!isMagicMode && weaponCount >= MAX_SLOTS && " | 武器満杯 (古い武器と入替)"}
