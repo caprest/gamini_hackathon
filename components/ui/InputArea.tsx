@@ -47,7 +47,7 @@ function sanitizeWeaponData(input: unknown): WeaponData {
     };
 }
 
-const MAX_WEAPONS = 3;
+const MAX_SLOTS = 3;
 
 export function InputArea() {
     const [text, setText] = useState("");
@@ -56,11 +56,13 @@ export function InputArea() {
     const [isMagicMode, setIsMagicMode] = useState(false); // false = Weapon, true = Magic
     const [mp, setMp] = useState(100);
     const [weaponCount, setWeaponCount] = useState(0);
+    const [magicCount, setMagicCount] = useState(0);
 
     useEffect(() => {
         const handleMp = (val: number) => setMp(val);
-        const handleWeaponsUpdate = (data: { weapons: WeaponData[]; activeIndex: number }) => {
+        const handleWeaponsUpdate = (data: { weapons: WeaponData[]; magics: WeaponData[] }) => {
             setWeaponCount(data.weapons.length);
+            setMagicCount(data.magics.length);
         };
         GameEventBus.on("mp-update", handleMp);
         GameEventBus.on("weapons-update", handleWeaponsUpdate);
@@ -218,8 +220,9 @@ export function InputArea() {
                 </button>
             </form>
             <div className="text-xs text-slate-500 mt-2 ml-1">
-                ※スペースキーで攻撃！数字キー(1,2,3)で武器切替
-                {weaponCount >= MAX_WEAPONS && " | 武器満杯 (古い武器と入替)"}
+                ※スペースキーで攻撃！1,2,3で選択 / Tabで武器⇔魔法切替
+                {!isMagicMode && weaponCount >= MAX_SLOTS && " | 武器満杯 (古い武器と入替)"}
+                {isMagicMode && magicCount >= MAX_SLOTS && " | 魔法満杯 (古い魔法と入替)"}
             </div>
         </div>
     );
