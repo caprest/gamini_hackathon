@@ -45,6 +45,7 @@ type WeaponPayload = {
     attack_animation: "slash" | "slash_wide" | "thrust" | "projectile" | "explosion" | "beam";
     description: string;
     uniqueness_score: number;
+    image_url?: string;
 };
 
 function tryParseWeaponJson(raw: string): WeaponPayload {
@@ -236,6 +237,32 @@ export async function POST(req: NextRequest) {
             const finishReason = result.response.candidates?.[0]?.finishReason;
             try {
                 const weaponData = tryParseWeaponJson(raw);
+                if (process.env.BANANA_API_KEY) {
+                    try {
+                        const bananaPrompt = `pixel art style, 32x32 sprite, side view, game weapon, ${weaponData.weapon_name}, ${weaponData.element !== "none" ? `${weaponData.element} element` : ""}, ${weaponData.description}, solid white background, retro game style`;
+                        const imageRes = await fetch(
+                            `https://generativelanguage.googleapis.com/v1beta/models/nano-banana-pro-preview:generateContent?key=${process.env.BANANA_API_KEY}`,
+                            {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({
+                                    contents: [{ parts: [{ text: bananaPrompt }] }],
+                                }),
+                            }
+                        );
+                        if (imageRes.ok) {
+                            const imageData = await imageRes.json();
+                            const inlineData = imageData.candidates?.[0]?.content?.parts?.[0]?.inlineData;
+                            if (inlineData) {
+                                weaponData.image_url = `data:${inlineData.mimeType};base64,${inlineData.data}`;
+                            }
+                        } else {
+                            console.error("Banana API Weapon Image generation failed:", await imageRes.text());
+                        }
+                    } catch (imgError) {
+                        console.error("Banana API Error for Weapon:", imgError);
+                    }
+                }
                 return NextResponse.json(weaponData);
             } catch {
                 console.warn("[generate-weapon] JSON parse failed", {

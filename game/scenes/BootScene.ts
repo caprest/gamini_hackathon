@@ -12,8 +12,13 @@ export class BootScene extends Phaser.Scene {
         graphics.fillRect(0, 0, 4, 4);
         graphics.generateTexture("particle", 4, 4);
 
-        // Create emoji textures (since we aren't using image assets to save time)
-        this.createEmojiTexture("player", "🦕", 48);
+        // Check for custom player image
+        const customPlayerImage = localStorage.getItem("customPlayerImage");
+        if (customPlayerImage) {
+            this.load.image("player", customPlayerImage);
+        } else {
+            this.createEmojiTexture("player", "🦕", 48);
+        }
         this.createEmojiTexture("cactus_small", "🌵", 32);
         this.createEmojiTexture("cactus_large", "🌵", 48);
         this.createEmojiTexture("fire_wall", "🔥", 48);
