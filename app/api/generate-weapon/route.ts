@@ -1,20 +1,20 @@
-import { GoogleGenerativeAI, SchemaType } from "@google/generative-ai";
+import { GoogleGenerativeAI, SchemaType, type Schema } from "@google/generative-ai";
 import { NextRequest, NextResponse } from "next/server";
 
 export const runtime = "nodejs";
 
-const WEAPON_RESPONSE_SCHEMA = {
+const WEAPON_RESPONSE_SCHEMA: Schema = {
     type: SchemaType.OBJECT,
     properties: {
         weapon_name: { type: SchemaType.STRING },
-        type: { type: SchemaType.STRING, enum: ["melee", "ranged", "magic"] },
+        type: { type: SchemaType.STRING, format: "enum", enum: ["melee", "ranged", "magic"] },
         damage: { type: SchemaType.NUMBER },
         mp_cost: { type: SchemaType.NUMBER },
-        range: { type: SchemaType.STRING, enum: ["short", "medium", "long"] },
-        element: { type: SchemaType.STRING, enum: ["fire", "ice", "thunder", "wind", "earth", "light", "dark", "none"] },
+        range: { type: SchemaType.STRING, format: "enum", enum: ["short", "medium", "long"] },
+        element: { type: SchemaType.STRING, format: "enum", enum: ["fire", "ice", "thunder", "wind", "earth", "light", "dark", "none"] },
         sprite_emoji: { type: SchemaType.STRING },
         color: { type: SchemaType.STRING },
-        attack_animation: { type: SchemaType.STRING, enum: ["slash", "slash_wide", "thrust", "projectile", "explosion", "beam"] },
+        attack_animation: { type: SchemaType.STRING, format: "enum", enum: ["slash", "slash_wide", "thrust", "projectile", "explosion", "beam"] },
         description: { type: SchemaType.STRING },
         uniqueness_score: { type: SchemaType.NUMBER },
     },
@@ -31,7 +31,7 @@ const WEAPON_RESPONSE_SCHEMA = {
         "description",
         "uniqueness_score",
     ],
-} as const;
+};
 
 type WeaponPayload = {
     weapon_name: string;
