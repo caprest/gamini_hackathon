@@ -41,10 +41,9 @@ export function BossSettings() {
         localStorage.setItem(BOSS_SETTINGS_KEY, JSON.stringify(data));
     };
 
-    const handleToggle = () => {
-        const next = !enabled;
-        setEnabled(next);
-        save(next, timeSec);
+    const handleToggle = (value: boolean) => {
+        setEnabled(value);
+        save(value, timeSec);
     };
 
     const handleTimeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -54,25 +53,43 @@ export function BossSettings() {
     };
 
     return (
-        <div className="flex items-center gap-4 text-sm text-slate-300">
-            <label className="flex items-center gap-2 cursor-pointer select-none">
-                <input
-                    type="checkbox"
-                    checked={enabled}
-                    onChange={handleToggle}
-                    className="w-4 h-4 accent-red-500"
-                />
-                <span>👹 ボス戦</span>
-            </label>
+        <div className="bg-slate-800 border border-slate-700 rounded-lg px-4 py-3 flex items-center gap-6">
+            <span className="text-lg">👹</span>
+            <div className="flex items-center gap-3">
+                <label className="flex items-center gap-2 cursor-pointer select-none">
+                    <input
+                        type="radio"
+                        name="bossMode"
+                        checked={enabled}
+                        onChange={() => handleToggle(true)}
+                        className="w-4 h-4 accent-red-500"
+                    />
+                    <span className={`text-sm font-bold ${enabled ? "text-red-400" : "text-slate-500"}`}>
+                        ボス戦ON
+                    </span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer select-none">
+                    <input
+                        type="radio"
+                        name="bossMode"
+                        checked={!enabled}
+                        onChange={() => handleToggle(false)}
+                        className="w-4 h-4 accent-slate-400"
+                    />
+                    <span className={`text-sm font-bold ${!enabled ? "text-slate-300" : "text-slate-500"}`}>
+                        OFF
+                    </span>
+                </label>
+            </div>
             {enabled && (
-                <label className="flex items-center gap-1">
+                <label className="flex items-center gap-1 text-sm text-slate-400 ml-auto">
                     <input
                         type="number"
                         min={1}
                         max={999}
                         value={timeSec}
                         onChange={handleTimeChange}
-                        className="w-16 px-2 py-1 rounded bg-slate-700 text-white text-center border border-slate-600 focus:border-red-500 focus:outline-none"
+                        className="w-14 px-2 py-1 rounded bg-slate-700 text-white text-center border border-slate-600 focus:border-red-500 focus:outline-none text-sm"
                     />
                     <span>秒後に出現</span>
                 </label>

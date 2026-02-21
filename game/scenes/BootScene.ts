@@ -24,7 +24,7 @@ export class BootScene extends Phaser.Scene {
         this.createEmojiTexture("fire_wall", "🔥", 48);
         this.createEmojiTexture("spike", "⚡", 32);
         this.createEmojiTexture("pteranodon", "🦅", 40);
-        this.createEmojiTexture("boss", "👹", 64);
+        this.createEmojiTexture("boss", "👹", 96);
         this.createEmojiTexture("dino_updown", "🐍", 48);
         this.createEmojiTexture("dino_leftright", "🐊", 48);
         this.createEmojiTexture("heart", "❤️", 24);
