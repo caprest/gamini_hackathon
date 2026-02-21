@@ -95,7 +95,7 @@ function SlotRow({
                                 : "border-dashed border-slate-200 bg-slate-50"
                         }`}
                     >
-                        <div className="text-xs text-slate-400 font-mono mb-1">#{i + 1}</div>
+                        <div className="text-xs text-slate-400 font-mono mb-1">#{label.includes("魔法") ? i + 4 : i + 1}</div>
                         {items[i] ? (
                             <ItemSlot item={items[i]} isActive={isActiveMode && i === activeIndex} />
                         ) : (
@@ -167,7 +167,7 @@ export function WeaponDisplay() {
                 slotCount={3}
             />
             <div className="text-xs text-slate-400 text-center">
-                Tabキーで武器/魔法切替 | 1,2,3で選択
+                1,2,3で武器選択 | 4,5,6で魔法選択
             </div>
         </div>
     );

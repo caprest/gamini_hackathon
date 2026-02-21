@@ -113,13 +113,12 @@ export class GameScene extends Phaser.Scene {
 
         // Input
         this.input.keyboard!.on("keydown-SPACE", () => this.attack());
-        this.input.keyboard!.on("keydown-ONE", () => this.selectSlot(0));
-        this.input.keyboard!.on("keydown-TWO", () => this.selectSlot(1));
-        this.input.keyboard!.on("keydown-THREE", () => this.selectSlot(2));
-        this.input.keyboard!.on("keydown-TAB", (e: KeyboardEvent) => {
-            e.preventDefault();
-            this.toggleMode();
-        });
+        this.input.keyboard!.on("keydown-ONE", () => this.selectWeaponSlot(0));
+        this.input.keyboard!.on("keydown-TWO", () => this.selectWeaponSlot(1));
+        this.input.keyboard!.on("keydown-THREE", () => this.selectWeaponSlot(2));
+        this.input.keyboard!.on("keydown-FOUR", () => this.selectMagicSlot(0));
+        this.input.keyboard!.on("keydown-FIVE", () => this.selectMagicSlot(1));
+        this.input.keyboard!.on("keydown-SIX", () => this.selectMagicSlot(2));
 
         // Spawner
         this.startSpawning();
@@ -194,20 +193,18 @@ export class GameScene extends Phaser.Scene {
         });
     }
 
-    private toggleMode() {
-        this.activeMode = this.activeMode === "weapon" ? "magic" : "weapon";
+    private selectWeaponSlot(index: number) {
+        if (index < 0 || index >= this.weapons.length) return;
+        this.activeWeaponIndex = index;
+        this.activeMode = "weapon";
         this.updateAllSpriteVisuals();
         this.emitInventoryUpdate();
     }
 
-    private selectSlot(index: number) {
-        if (this.activeMode === "weapon") {
-            if (index < 0 || index >= this.weapons.length) return;
-            this.activeWeaponIndex = index;
-        } else {
-            if (index < 0 || index >= this.magics.length) return;
-            this.activeMagicIndex = index;
-        }
+    private selectMagicSlot(index: number) {
+        if (index < 0 || index >= this.magics.length) return;
+        this.activeMagicIndex = index;
+        this.activeMode = "magic";
         this.updateAllSpriteVisuals();
         this.emitInventoryUpdate();
     }
