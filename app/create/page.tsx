@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 
@@ -9,23 +9,6 @@ export default function CreateCharacterPage() {
     const [isGenerating, setIsGenerating] = useState(false);
     const [resultImage, setResultImage] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
-    const audioRef = useRef<HTMLAudioElement | null>(null);
-
-    useEffect(() => {
-        audioRef.current = new Audio("/sounds/bgm_menu.mp3");
-        audioRef.current.loop = true;
-        audioRef.current.volume = 0.5;
-        // Attempt to autoplay. Browsers might block this until user interacts,
-        // but since they usually click a link to get here, it often works.
-        audioRef.current.play().catch(e => console.warn("Audio autoplay prevented:", e));
-
-        return () => {
-            if (audioRef.current) {
-                audioRef.current.pause();
-                audioRef.current = null;
-            }
-        };
-    }, []);
 
     const handleGenerate = async (e: React.FormEvent) => {
         e.preventDefault();
