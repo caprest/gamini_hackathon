@@ -5,6 +5,7 @@ import { GameEventBus } from "../EventBus";
 import { WeaponData, ObstacleConfig, DEFAULT_GAME_CONFIG } from "../../types/game";
 
 const MAX_SLOTS = 3;
+const CAMERA_WEAPONS_KEY = "savedCameraWeapons";
 type ActiveMode = "weapon" | "magic";
 
 export class GameScene extends Phaser.Scene {
@@ -116,7 +117,27 @@ export class GameScene extends Phaser.Scene {
         GameEventBus.emit("hp-update", this.hp);
         GameEventBus.emit("mp-update", this.mp);
         GameEventBus.emit("score-update", 0);
+
+        // Restore saved camera weapons
+        this.loadSavedCameraWeapons();
+
         this.emitInventoryUpdate();
+    }
+
+    private loadSavedCameraWeapons() {
+        try {
+            const raw = localStorage.getItem(CAMERA_WEAPONS_KEY);
+            if (!raw) return;
+            const list: WeaponData[] = JSON.parse(raw);
+            if (!Array.isArray(list)) return;
+            for (const w of list) {
+                if (w && w.weapon_name) {
+                    this.setWeapon(w);
+                }
+            }
+        } catch {
+            // corrupted data — ignore
+        }
     }
 
     private setupEventBusListeners() {
