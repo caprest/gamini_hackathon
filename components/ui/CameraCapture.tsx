@@ -6,6 +6,22 @@ import { processWeaponImage } from "@/lib/imageProcessor";
 
 type Phase = "idle" | "processing" | "preview" | "generating";
 
+const CAMERA_WEAPONS_KEY = "savedCameraWeapons";
+const MAX_SAVED = 3;
+
+function saveCameraWeapon(weapon: Record<string, unknown>) {
+    try {
+        const raw = localStorage.getItem(CAMERA_WEAPONS_KEY);
+        const list: Record<string, unknown>[] = raw ? JSON.parse(raw) : [];
+        list.push(weapon);
+        // Keep only the latest MAX_SAVED
+        while (list.length > MAX_SAVED) list.shift();
+        localStorage.setItem(CAMERA_WEAPONS_KEY, JSON.stringify(list));
+    } catch {
+        // localStorage full or unavailable — ignore
+    }
+}
+
 export function CameraCapture() {
     const [phase, setPhase] = useState<Phase>("idle");
     const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -64,23 +80,26 @@ export function CameraCapture() {
             if (res.ok) {
                 const weaponData = await res.json();
                 weaponData.image_url = spriteUrl;
+                saveCameraWeapon(weaponData);
                 GameEventBus.emit("weapon-ready", weaponData);
             } else {
                 console.error("Failed to generate weapon from image:", res.status);
-                GameEventBus.emit("weapon-ready", {
+                const fallback = {
                     weapon_name: "撮影物体の剣",
-                    type: "melee",
+                    type: "melee" as const,
                     damage: 15,
                     mp_cost: 5,
-                    range: "short",
-                    element: "none",
+                    range: "short" as const,
+                    element: "none" as const,
                     sprite_emoji: "📷",
                     color: "#888888",
-                    attack_animation: "slash",
+                    attack_animation: "slash" as const,
                     description: "撮影に失敗した武器",
                     uniqueness_score: 10,
                     image_url: spriteUrl,
-                });
+                };
+                saveCameraWeapon(fallback);
+                GameEventBus.emit("weapon-ready", fallback);
             }
         } catch (err) {
             console.error(err);
