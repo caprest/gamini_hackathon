@@ -52,6 +52,9 @@ export class GameScene extends Phaser.Scene {
     private bossBorderTop: Phaser.GameObjects.Rectangle | null = null;
     private bossBorderBottom: Phaser.GameObjects.Rectangle | null = null;
     private stage: number = 1;
+    private bossAttackEvent: Phaser.Time.TimerEvent | null = null;
+    private bossBeamHitCount: number = 0;
+    private bossStopped: boolean = false;
 
     constructor() {
         super("GameScene");
@@ -100,6 +103,9 @@ export class GameScene extends Phaser.Scene {
         this.bossHpBar = null;
         this.bossHpBarBg = null;
         this.gameElapsedSec = 0;
+        this.bossAttackEvent = null;
+        this.bossBeamHitCount = 0;
+        this.bossStopped = false;
 
         // Background sky
         this.add.rectangle(0, 0, width, height, 0x87ceeb).setOrigin(0, 0);
@@ -724,7 +730,125 @@ export class GameScene extends Phaser.Scene {
         const body = boss.body as Phaser.Physics.Arcade.Body;
         if (body && boss.x <= this.scale.width * 0.65) {
             body.setVelocityX(0);
+            // Start boss attacks once stopped
+            if (!this.bossStopped) {
+                this.bossStopped = true;
+                this.startBossAttacks();
+            }
         }
+    }
+
+    private startBossAttacks() {
+        // Boss fires a beam every 3-5 seconds
+        this.bossAttackEvent = this.time.addEvent({
+            delay: 3500,
+            callback: () => this.bossFireBeam(),
+            callbackScope: this,
+            loop: true,
+        });
+    }
+
+    private bossFireBeam() {
+        if (!this.currentBoss || !this.currentBoss.active || this.hp <= 0) return;
+
+        const boss = this.currentBoss;
+
+        // Charging indicator on boss
+        const chargeCircle = this.add.circle(boss.x - 30, boss.y, 12, 0xff0000, 0.6).setDepth(92);
+        this.tweens.add({
+            targets: chargeCircle,
+            scale: 2.5,
+            alpha: 1,
+            duration: 600,
+            onComplete: () => {
+                chargeCircle.destroy();
+                if (!this.currentBoss || !this.currentBoss.active || this.hp <= 0) return;
+                this.fireBossBeamProjectile();
+            }
+        });
+    }
+
+    private fireBossBeamProjectile() {
+        if (!this.currentBoss || this.hp <= 0) return;
+        const boss = this.currentBoss;
+
+        // Beam sound effect
+        const audioContext = this.resolveAudioContext();
+        if (audioContext && audioContext.state === "running") {
+            const now = audioContext.currentTime;
+            const osc = audioContext.createOscillator();
+            const gain = audioContext.createGain();
+            osc.type = "sawtooth";
+            osc.frequency.setValueAtTime(800, now);
+            osc.frequency.exponentialRampToValueAtTime(200, now + 0.3);
+            gain.gain.setValueAtTime(0.12, now);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+            osc.connect(gain);
+            gain.connect(audioContext.destination);
+            osc.start(now);
+            osc.stop(now + 0.35);
+        }
+
+        // Create beam visual — a red rectangle that travels from boss to player
+        const beamWidth = boss.x - this.player.x;
+        const beam = this.add.rectangle(
+            boss.x - 20, boss.y, 20, 8, 0xff2200
+        ).setOrigin(1, 0.5).setDepth(80);
+
+        // Beam glow
+        const glow = this.add.rectangle(
+            boss.x - 20, boss.y, 20, 16, 0xff0000, 0.3
+        ).setOrigin(1, 0.5).setDepth(79);
+
+        this.tweens.add({
+            targets: [beam, glow],
+            displayWidth: beamWidth + 40,
+            duration: 400,
+            ease: "Quad.easeIn",
+            onComplete: () => {
+                // Check if beam reaches the player
+                if (this.hp > 0) {
+                    this.bossBeamHitCount++;
+
+                    if (this.bossBeamHitCount === 1) {
+                        // First hit: HP → 1
+                        this.hp = 1;
+                    } else {
+                        // Second+ hit: HP → 0
+                        this.hp = 0;
+                    }
+
+                    GameEventBus.emit("hp-update", Math.max(0, this.hp));
+                    this.playDamageSfx(50);
+                    this.playDamageEffects(50);
+
+                    // Screen flash red
+                    const { width, height } = this.scale;
+                    const hitFlash = this.add.rectangle(0, 0, width, height, 0xff0000, 0.4).setOrigin(0, 0).setDepth(200);
+                    this.tweens.add({
+                        targets: hitFlash,
+                        alpha: 0,
+                        duration: 300,
+                        onComplete: () => hitFlash.destroy()
+                    });
+
+                    if (this.hp <= 0) {
+                        this.gameOver();
+                    }
+                }
+
+                // Fade out beam
+                this.tweens.add({
+                    targets: [beam, glow],
+                    alpha: 0,
+                    duration: 200,
+                    onComplete: () => {
+                        beam.destroy();
+                        glow.destroy();
+                    }
+                });
+            }
+        });
     }
 
     private onBossDefeated() {
@@ -752,6 +876,7 @@ export class GameScene extends Phaser.Scene {
         // Clean up HP bar
         if (this.bossHpBar) { this.bossHpBar.destroy(); this.bossHpBar = null; }
         if (this.bossHpBarBg) { this.bossHpBarBg.destroy(); this.bossHpBarBg = null; }
+        if (this.bossAttackEvent) { this.bossAttackEvent.remove(); this.bossAttackEvent = null; }
 
         // Clean up boss fight overlays
         this.cleanupBossOverlaysImmediate();
@@ -980,6 +1105,7 @@ export class GameScene extends Phaser.Scene {
         // Clean up boss state
         if (this.bossHpBar) { this.bossHpBar.destroy(); this.bossHpBar = null; }
         if (this.bossHpBarBg) { this.bossHpBarBg.destroy(); this.bossHpBarBg = null; }
+        if (this.bossAttackEvent) { this.bossAttackEvent.remove(); this.bossAttackEvent = null; }
         if (this.bossBgOverlay) { this.bossBgOverlay.destroy(); this.bossBgOverlay = null; }
         if (this.bossBorderTop) { this.bossBorderTop.destroy(); this.bossBorderTop = null; }
         if (this.bossBorderBottom) { this.bossBorderBottom.destroy(); this.bossBorderBottom = null; }
