@@ -73,7 +73,11 @@ export async function resizeToGameSprite(
     return canvas.toDataURL("image/png");
 }
 
-export async function processWeaponImage(blob: Blob): Promise<string> {
+export async function processWeaponImage(blob: Blob): Promise<{ apiImage: string; spriteImage: string }> {
     const bgRemoved = await removeBg(blob);
-    return resizeToGameSprite(bgRemoved, 48);
+    const [apiImage, spriteImage] = await Promise.all([
+        resizeToGameSprite(bgRemoved, 512),
+        resizeToGameSprite(bgRemoved, 48),
+    ]);
+    return { apiImage, spriteImage };
 }

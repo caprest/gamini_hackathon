@@ -4,6 +4,8 @@ import { Obstacle } from "../objects/Obstacle";
 import { GameEventBus } from "../EventBus";
 import { WeaponData, ObstacleConfig, DEFAULT_GAME_CONFIG } from "../../types/game";
 
+const MAX_WEAPONS = 3;
+
 export class GameScene extends Phaser.Scene {
     private player!: Player;
     private obstacles!: Phaser.GameObjects.Group;
@@ -14,7 +16,9 @@ export class GameScene extends Phaser.Scene {
     private hp: number = DEFAULT_GAME_CONFIG.initialHP;
     private mp: number = DEFAULT_GAME_CONFIG.initialMP;
 
-    private currentWeapon: WeaponData | null = null;
+    private weapons: WeaponData[] = [];
+    private weaponSprites: (Phaser.GameObjects.Image | Phaser.GameObjects.Text)[] = [];
+    private activeWeaponIndex: number = 0;
     private isCharging: boolean = false;
     private chargeEffect: Phaser.GameObjects.Particles.ParticleEmitter | null = null;
     private spawnEvent!: Phaser.Time.TimerEvent;
@@ -29,12 +33,11 @@ export class GameScene extends Phaser.Scene {
     create() {
         const { width, height } = this.scale;
 
-        // Clean up previous held weapon
-        if (this.heldWeaponSprite) {
-            this.heldWeaponSprite.destroy();
-            this.heldWeaponSprite = null;
-        }
-        this.currentWeapon = null;
+        // Clean up previous weapon sprites
+        this.weaponSprites.forEach(s => s.destroy());
+        this.weaponSprites = [];
+        this.weapons = [];
+        this.activeWeaponIndex = 0;
 
         // Reset stats
         this.score = 0;
@@ -67,6 +70,9 @@ export class GameScene extends Phaser.Scene {
 
         // Input
         this.input.keyboard!.on("keydown-SPACE", () => this.attack());
+        this.input.keyboard!.on("keydown-ONE", () => this.selectWeapon(0));
+        this.input.keyboard!.on("keydown-TWO", () => this.selectWeapon(1));
+        this.input.keyboard!.on("keydown-THREE", () => this.selectWeapon(2));
 
         // Spawner
         this.startSpawning();
@@ -91,20 +97,43 @@ export class GameScene extends Phaser.Scene {
         GameEventBus.emit("hp-update", this.hp);
         GameEventBus.emit("mp-update", this.mp);
         GameEventBus.emit("score-update", 0);
+        this.emitWeaponsUpdate();
     }
 
     private setupEventBusListeners() {
-        // Clean up previous listeners to prevent memory leaks in Phaser
+        // Clean up previous listeners to prevent memory leaks
         GameEventBus.removeAllListeners("weapon-request");
+        GameEventBus.removeAllListeners("weapon-ready");
 
         GameEventBus.on("weapon-request", (cost: number) => {
             this.startCharging(cost);
         }, this);
 
         GameEventBus.on("weapon-ready", (weaponData: WeaponData) => {
-            console.warn("[weapon-debug] GameScene weapon-ready", weaponData);
             this.setWeapon(weaponData);
         }, this);
+    }
+
+    private emitWeaponsUpdate() {
+        GameEventBus.emit("weapons-update", {
+            weapons: [...this.weapons],
+            activeIndex: this.activeWeaponIndex,
+        });
+    }
+
+    private selectWeapon(index: number) {
+        if (index < 0 || index >= this.weapons.length) return;
+        this.activeWeaponIndex = index;
+        this.updateWeaponSpriteVisuals();
+        this.emitWeaponsUpdate();
+    }
+
+    private updateWeaponSpriteVisuals() {
+        this.weaponSprites.forEach((sprite, i) => {
+            const isActive = i === this.activeWeaponIndex;
+            sprite.setScale(isActive ? 1.2 : 0.7);
+            sprite.setAlpha(isActive ? 1.0 : 0.5);
+        });
     }
 
     private startSpawning() {
@@ -161,7 +190,6 @@ export class GameScene extends Phaser.Scene {
     }
 
     private finalizeSetWeapon(weaponData: WeaponData) {
-        this.currentWeapon = weaponData;
         this.isCharging = false;
         if (this.chargeEffect) {
             this.chargeEffect.stop();
@@ -169,28 +197,27 @@ export class GameScene extends Phaser.Scene {
             this.chargeEffect = null;
         }
 
-        // Destroy previous held weapon sprite
-        if (this.heldWeaponSprite) {
-            this.heldWeaponSprite.destroy();
-            this.heldWeaponSprite = null;
+        // If inventory is full, remove the oldest weapon
+        if (this.weapons.length >= MAX_WEAPONS) {
+            this.weapons.shift();
+            const oldSprite = this.weaponSprites.shift();
+            if (oldSprite) oldSprite.destroy();
+            // Adjust activeWeaponIndex
+            if (this.activeWeaponIndex > 0) {
+                this.activeWeaponIndex--;
+            }
         }
 
-        // Create held weapon display next to player
-        const textureKey = weaponData.image_url ? "weapon_" + weaponData.weapon_name : null;
-        if (textureKey && this.textures.exists(textureKey)) {
-            this.heldWeaponSprite = this.add.image(
-                this.player.x + 20,
-                this.player.y - 5,
-                textureKey
-            ).setOrigin(0.5).setDisplaySize(32, 32);
-        } else {
-            this.heldWeaponSprite = this.add.text(
-                this.player.x + 20,
-                this.player.y - 5,
-                weaponData.sprite_emoji,
-                { fontSize: "24px" }
-            ).setOrigin(0.5);
-        }
+        // Add new weapon
+        this.weapons.push(weaponData);
+
+        // Create sprite for the new weapon
+        const sprite = this.createWeaponSprite(weaponData);
+        this.weaponSprites.push(sprite);
+
+        // Set active to the newly added weapon
+        this.activeWeaponIndex = this.weapons.length - 1;
+        this.updateWeaponSpriteVisuals();
 
         // Create "READY!" text
         const text = this.add.text(this.player.x, this.player.y - 40, "READY!", {
@@ -206,6 +233,26 @@ export class GameScene extends Phaser.Scene {
             duration: 1000,
             onComplete: () => text.destroy()
         });
+
+        this.emitWeaponsUpdate();
+    }
+
+    private createWeaponSprite(weaponData: WeaponData): Phaser.GameObjects.Image | Phaser.GameObjects.Text {
+        const textureKey = weaponData.image_url ? "weapon_" + weaponData.weapon_name : null;
+        if (textureKey && this.textures.exists(textureKey)) {
+            return this.add.image(
+                this.player.x + 20,
+                this.player.y - 15,
+                textureKey
+            ).setOrigin(0.5).setDisplaySize(32, 32);
+        } else {
+            return this.add.text(
+                this.player.x + 20,
+                this.player.y - 15,
+                weaponData.sprite_emoji,
+                { fontSize: "24px" }
+            ).setOrigin(0.5);
+        }
     }
 
     startCharging(cost: number) {
@@ -222,11 +269,6 @@ export class GameScene extends Phaser.Scene {
         GameEventBus.emit("mp-update", this.mp);
 
         this.isCharging = true;
-
-        // Clear current weapon text if generating new one
-        if (this.currentWeapon) {
-            this.currentWeapon = null;
-        }
 
         // Create particle effect
         if (!this.chargeEffect) {
@@ -251,20 +293,22 @@ export class GameScene extends Phaser.Scene {
     attack() {
         if (this.hp <= 0) return;
 
+        const currentWeapon = this.weapons[this.activeWeaponIndex] ?? null;
+
+        if (!currentWeapon) {
         const now = this.time.now;
         const isMeleeAttack = !this.currentWeapon || this.currentWeapon.type === "melee";
         if (isMeleeAttack && now - this.lastMeleeAttackAt < DEFAULT_GAME_CONFIG.meleeRecoveryMs) {
             return;
         }
 
-        if (!this.currentWeapon) {
             // Barehand attack
             this.performAttack(DEFAULT_GAME_CONFIG.bareHandDamage, "short", "slash", 0xffffff, "⚡");
             this.lastMeleeAttackAt = now;
             return;
         }
 
-        if (this.currentWeapon.type === "heal") {
+        if (currentWeapon.type === "heal") {
             const healAmount = 50;
             this.hp = Math.min(DEFAULT_GAME_CONFIG.initialHP, this.hp + healAmount);
             GameEventBus.emit("hp-update", this.hp);
@@ -291,37 +335,44 @@ export class GameScene extends Phaser.Scene {
                 onComplete: () => healText.destroy()
             });
 
-            GameEventBus.emit("attack-executed", this.currentWeapon);
-            this.currentWeapon = null; // Magic is consumed
-            if (this.heldWeaponSprite) {
-                this.heldWeaponSprite.destroy();
-                this.heldWeaponSprite = null;
-            }
+            GameEventBus.emit("attack-executed", currentWeapon);
+            this.removeWeaponAt(this.activeWeaponIndex);
             return;
         }
 
-        // Use weapon/magic (no longer costs MP per attack, it persists unless it's magic)
+        // Use weapon/magic
         this.performAttack(
-            this.currentWeapon.damage,
-            this.currentWeapon.range,
-            this.currentWeapon.attack_animation,
-            parseInt(this.currentWeapon.color.replace("#", "0x")) || 0xff0000,
-            this.currentWeapon.sprite_emoji,
-            this.currentWeapon.image_url ? "weapon_" + this.currentWeapon.weapon_name : undefined
+            currentWeapon.damage,
+            currentWeapon.range,
+            currentWeapon.attack_animation,
+            parseInt(currentWeapon.color.replace("#", "0x")) || 0xff0000,
+            currentWeapon.sprite_emoji,
+            currentWeapon.image_url ? "weapon_" + currentWeapon.weapon_name : undefined
         );
         if (this.currentWeapon.type === "melee") {
             this.lastMeleeAttackAt = now;
         }
 
-        GameEventBus.emit("attack-executed", this.currentWeapon);
+        GameEventBus.emit("attack-executed", currentWeapon);
 
-        if (this.currentWeapon.type === "magic") {
-            this.currentWeapon = null; // Magic is consumed
-            if (this.heldWeaponSprite) {
-                this.heldWeaponSprite.destroy();
-                this.heldWeaponSprite = null;
-            }
+        if (currentWeapon.type === "magic") {
+            this.removeWeaponAt(this.activeWeaponIndex);
         }
+    }
+
+    private removeWeaponAt(index: number) {
+        this.weapons.splice(index, 1);
+        const sprite = this.weaponSprites.splice(index, 1)[0];
+        if (sprite) sprite.destroy();
+
+        // Adjust active index
+        if (this.weapons.length === 0) {
+            this.activeWeaponIndex = 0;
+        } else if (this.activeWeaponIndex >= this.weapons.length) {
+            this.activeWeaponIndex = this.weapons.length - 1;
+        }
+        this.updateWeaponSpriteVisuals();
+        this.emitWeaponsUpdate();
     }
 
     private performAttack(damage: number, range: string, animation: string, tint: number, emoji: string, textureKey?: string) {
@@ -471,10 +522,10 @@ export class GameScene extends Phaser.Scene {
             }
         }
 
-        // Follow player with held weapon sprite
-        if (this.heldWeaponSprite) {
-            this.heldWeaponSprite.setPosition(this.player.x + 20, this.player.y - 5);
-        }
+        // Follow player with weapon sprites
+        this.weaponSprites.forEach((sprite, i) => {
+            sprite.setPosition(this.player.x + 20, this.player.y - 15 - (i * 22));
+        });
 
         // Cleanup offscreen objects
         this.obstacles.getChildren().forEach(child => {
