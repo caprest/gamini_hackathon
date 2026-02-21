@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import { GameEventBus } from "@/game/EventBus";
 import { processWeaponImage } from "@/lib/imageProcessor";
+import { incrementApiUsage } from "@/components/ui/ApiUsageIndicator";
 
 type Phase = "idle" | "processing" | "preview" | "generating";
 
@@ -89,6 +90,7 @@ export function CameraCapture() {
         GameEventBus.emit("weapon-request", 20);
 
         try {
+            incrementApiUsage();
             const res = await fetch("/api/generate-weapon-from-image", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },

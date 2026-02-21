@@ -6,6 +6,7 @@ import { WeaponDisplay } from "@/components/ui/WeaponDisplay";
 import { InputArea } from "@/components/ui/InputArea";
 import { CameraCapture } from "@/components/ui/CameraCapture";
 import { BossSettings } from "@/components/ui/BossSettings";
+import { ApiUsageIndicator } from "@/components/ui/ApiUsageIndicator";
 import Link from "next/link";
 import { Suspense } from "react";
 
@@ -19,9 +20,12 @@ export default function GamePage() {
         <main className="min-h-screen bg-slate-900 p-8 flex flex-col items-center justify-center font-sans">
             <div className="w-full max-w-[800px] mb-4 flex justify-between items-center text-white">
                 <h1 className="text-2xl font-bold tracking-wider">NO JUMP DINOSAUR</h1>
-                <Link href="/" className="text-slate-400 hover:text-white transition-colors">
-                    ← タイトルに戻る
-                </Link>
+                <div className="flex items-center gap-4">
+                    <ApiUsageIndicator />
+                    <Link href="/" className="text-slate-400 hover:text-white transition-colors">
+                        ← タイトルに戻る
+                    </Link>
+                </div>
             </div>
 
             <div className="w-full max-w-[800px] mb-3">
