@@ -340,8 +340,6 @@ export class GameScene extends Phaser.Scene {
             visual = this.add.image(this.player.x + 50, this.player.y, textureKey).setOrigin(0.5);
             (visual as Phaser.GameObjects.Image).setDisplaySize(64, 64);
             (visual as Phaser.GameObjects.Image).setBlendMode(Phaser.BlendModes.MULTIPLY);
-            // Flip the weapon horizontally if needed, depending on the generated output logic,
-            // usually pixel art faces left or right. We can assume default orientation.
         } else {
             visual = this.add.text(this.player.x + 50, this.player.y, emoji, { fontSize: "32px" }).setOrigin(0.5);
         }
@@ -354,6 +352,7 @@ export class GameScene extends Phaser.Scene {
                 onComplete: () => visual.destroy()
             });
         } else {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const targetScale = (visual as any).scaleX ? (visual as any).scaleX * 1.5 : 1.5;
             this.tweens.add({
                 targets: visual,
