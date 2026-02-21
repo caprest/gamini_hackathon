@@ -112,7 +112,10 @@ export class GameScene extends Phaser.Scene {
         );
 
         // Input
-        this.input.keyboard!.on("keydown-SPACE", () => this.attack());
+        this.input.keyboard!.on("keydown-SPACE", (e: KeyboardEvent) => {
+            e.preventDefault();
+            this.attack();
+        });
         this.input.keyboard!.on("keydown-ONE", () => this.selectSlot(0));
         this.input.keyboard!.on("keydown-TWO", () => this.selectSlot(1));
         this.input.keyboard!.on("keydown-THREE", () => this.selectSlot(2));
