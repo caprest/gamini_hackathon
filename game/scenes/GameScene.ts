@@ -88,8 +88,8 @@ export class GameScene extends Phaser.Scene {
         // Clean up previous listeners to prevent memory leaks in Phaser
         GameEventBus.removeAllListeners("weapon-request");
 
-        GameEventBus.on("weapon-request", () => {
-            this.startCharging();
+        GameEventBus.on("weapon-request", (cost: number) => {
+            this.startCharging(cost);
         }, this);
 
         GameEventBus.on("weapon-ready", (weaponData: WeaponData) => {
@@ -176,17 +176,17 @@ export class GameScene extends Phaser.Scene {
         });
     }
 
-    startCharging() {
+    startCharging(cost: number) {
         if (this.isCharging) return;
 
-        // Check MP for weapon generation (cost 20)
-        if (this.mp < 20) {
+        // Check MP for weapon/magic generation
+        if (this.mp < cost) {
             GameEventBus.emit("mp-insufficient");
             return;
         }
 
         // Deduct MP at generation
-        this.mp -= 20;
+        this.mp -= cost;
         GameEventBus.emit("mp-update", this.mp);
 
         this.isCharging = true;
@@ -225,7 +225,39 @@ export class GameScene extends Phaser.Scene {
             return;
         }
 
-        // Use magic weapon (no longer costs MP per attack, it persists)
+        if (this.currentWeapon.type === "heal") {
+            const healAmount = 50;
+            this.hp = Math.min(DEFAULT_GAME_CONFIG.initialHP, this.hp + healAmount);
+            GameEventBus.emit("hp-update", this.hp);
+
+            // Visual feedback
+            this.player.setTint(0x00ff00);
+            this.time.delayedCall(300, () => {
+                if (this.hp > 0) this.player.clearTint();
+            });
+
+            const healText = this.add.text(this.player.x, this.player.y - 50, `+${healAmount} HP`, {
+                fontSize: "20px",
+                color: "#00ff00",
+                fontStyle: "bold",
+                stroke: "#000000",
+                strokeThickness: 3
+            }).setOrigin(0.5);
+
+            this.tweens.add({
+                targets: healText,
+                y: healText.y - 50,
+                alpha: 0,
+                duration: 1000,
+                onComplete: () => healText.destroy()
+            });
+
+            GameEventBus.emit("attack-executed", this.currentWeapon);
+            this.currentWeapon = null; // Magic is consumed
+            return;
+        }
+
+        // Use weapon/magic (no longer costs MP per attack, it persists unless it's magic)
         this.performAttack(
             this.currentWeapon.damage,
             this.currentWeapon.range,
@@ -236,7 +268,10 @@ export class GameScene extends Phaser.Scene {
         );
 
         GameEventBus.emit("attack-executed", this.currentWeapon);
-        // Weapon persists, do not set to null
+
+        if (this.currentWeapon.type === "magic") {
+            this.currentWeapon = null; // Magic is consumed
+        }
     }
 
     private performAttack(damage: number, range: string, animation: string, tint: number, emoji: string, textureKey?: string) {
@@ -286,10 +321,11 @@ export class GameScene extends Phaser.Scene {
                 onComplete: () => visual.destroy()
             });
         } else {
+            const targetScale = (visual as any).scaleX ? (visual as any).scaleX * 1.5 : 1.5;
             this.tweens.add({
                 targets: visual,
                 angle: 180,
-                scale: 1.5,
+                scale: targetScale,
                 alpha: 0,
                 duration: 300,
                 onComplete: () => visual.destroy()

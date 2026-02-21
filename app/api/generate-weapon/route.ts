@@ -252,7 +252,7 @@ function fallbackWeapon(userInput: string): WeaponPayload {
 
 export async function POST(req: NextRequest) {
     try {
-        const { userInput } = await req.json();
+        const { userInput, isMagic } = await req.json();
 
         if (!userInput) {
             return NextResponse.json({ error: "No input provided" }, { status: 400 });
@@ -266,27 +266,29 @@ export async function POST(req: NextRequest) {
         const genAI = new GoogleGenerativeAI(apiKey);
         const modelName = process.env.GEMINI_MODEL?.trim() || "gemini-2.5-flash";
 
-        const WEAPON_SYSTEM_PROMPT = `あなたはファンタジーゲーム「ノージャンプダイナソー」の武器デザイナーAIです。
-プレイヤーの入力テキストを元に、ゲーム内で使用可能な武器/魔法を1つ生成してください。
+        const promptContext = isMagic
+            ? `あなたはゲームの魔法使いAIです。入力に基づき【魔法】を1つ生成してください。\n・回復の意図があれば type="heal", damage=0\n・攻撃魔法なら type="magic", 範囲は広めに設定\n・mp_costは必ず30`
+            : `あなたはゲームの鍛冶屋AIです。入力に基づき【武器】を1つ生成してください。\n・無理やりでも武器として解釈\n・typeは "melee" または "ranged"\n・mp_costは必ず20`;
+
+        const WEAPON_SYSTEM_PROMPT = `${promptContext}
 
 ### ルール:
-1. どんな入力でも必ず武器・魔法として解釈すること（例: 「バナナ」→「バナナブーメラン」、「猫」→「猫パンチ爆弾」など関連付けて無理やりでも武器にする）
-2. 面白い・意外な解釈を積極的に行うこと
-3. damageは入力の具体性・独創性に比例（適当な入力なら低め、凝ったテキストなら高め）
-4. 必ず以下のJSON形式で出力（余計なテキスト不要、最初と最後の \`\`\`json 等のマークダウンも不要）
+1. 面白い・意外な解釈を積極的に行うこと
+2. damageは入力の具体性・独創性に比例
+3. 必ず以下のJSON形式で出力（マークダウン不要）
 
 ### JSON形式:
 {
-  "weapon_name": "武器名（日本語）",
-  "type": "melee" | "ranged" | "magic",
-  "damage": 10-100の数値,
-  "mp_cost": 5-50の数値,
+  "weapon_name": "名前（日本語）",
+  "type": "melee" | "ranged" | "magic" | "heal",
+  "damage": 0-100の数値,
+  "mp_cost": 20 または 30,
   "range": "short" | "medium" | "long",
   "element": "fire" | "ice" | "thunder" | "wind" | "earth" | "light" | "dark" | "none",
-  "sprite_emoji": "武器を表す絵文字1文字",
+  "sprite_emoji": "絵文字1文字",
   "color": "HEXカラーコード（例: #FF0000）",
   "attack_animation": "slash" | "slash_wide" | "thrust" | "projectile" | "explosion" | "beam",
-  "description": "武器の短い説明（20文字以内）",
+  "description": "説明（20文字以内）",
   "uniqueness_score": 0-100の数値
 }`;
 
