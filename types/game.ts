@@ -47,6 +47,8 @@ export interface GameConfig {
   bareHandDamage: number;
   meleeRecoveryMs: number; // 近接攻撃後の硬直時間
   obstacles: Record<string, { hp: number; damage: number }>;
+  bossEnabled: boolean;
+  bossSpawnTimeSec: number;
 }
 
 const toFiniteNumber = (value: unknown, fallback: number): number => {
@@ -70,5 +72,7 @@ export const DEFAULT_GAME_CONFIG: GameConfig = {
     "pteranodon": { hp: 20, damage: 25 },
     "dino_updown": { hp: 1, damage: 40 },
     "dino_leftright": { hp: 1, damage: 40 }
-  }
+  },
+  bossEnabled: typeof gameBalance.bossEnabled === "boolean" ? gameBalance.bossEnabled : true,
+  bossSpawnTimeSec: toFiniteNumber(gameBalance.bossSpawnTimeSec, 20),
 };

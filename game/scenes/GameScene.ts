@@ -37,6 +37,17 @@ export class GameScene extends Phaser.Scene {
     private mpRegenEvent!: Phaser.Time.TimerEvent;
     private lastMeleeAttackAt: number = 0;
 
+    // Boss battle
+    private bossEnabled: boolean = true;
+    private bossSpawnTimeSec: number = 20;
+    private bossSpawned: boolean = false;
+    private bossActive: boolean = false;
+    private currentBoss: Obstacle | null = null;
+    private bossHpBar: Phaser.GameObjects.Rectangle | null = null;
+    private bossHpBarBg: Phaser.GameObjects.Rectangle | null = null;
+    private bossMaxHp: number = 150;
+    private gameElapsedSec: number = 0;
+
     constructor() {
         super("GameScene");
     }
@@ -60,6 +71,22 @@ export class GameScene extends Phaser.Scene {
         this.hp = DEFAULT_GAME_CONFIG.initialHP;
         this.mp = DEFAULT_GAME_CONFIG.initialMP;
         this.scrollSpeed = DEFAULT_GAME_CONFIG.baseScrollSpeed;
+
+        // Boss settings from localStorage
+        try {
+            const bossSettings = JSON.parse(localStorage.getItem("bossSettings") || "{}");
+            this.bossEnabled = typeof bossSettings.enabled === "boolean" ? bossSettings.enabled : DEFAULT_GAME_CONFIG.bossEnabled;
+            this.bossSpawnTimeSec = typeof bossSettings.timeSec === "number" && bossSettings.timeSec > 0 ? bossSettings.timeSec : DEFAULT_GAME_CONFIG.bossSpawnTimeSec;
+        } catch {
+            this.bossEnabled = DEFAULT_GAME_CONFIG.bossEnabled;
+            this.bossSpawnTimeSec = DEFAULT_GAME_CONFIG.bossSpawnTimeSec;
+        }
+        this.bossSpawned = false;
+        this.bossActive = false;
+        this.currentBoss = null;
+        this.bossHpBar = null;
+        this.bossHpBarBg = null;
+        this.gameElapsedSec = 0;
 
         // Background sky
         this.add.rectangle(0, 0, width, height, 0x87ceeb).setOrigin(0, 0);
@@ -516,12 +543,19 @@ export class GameScene extends Phaser.Scene {
             const obstacle = obs as Obstacle;
             const killed = obstacle.takeDamage(damage);
             if (killed) {
-                const pts = obstacle.config.hp * 10;
-                this.score += pts;
-                this.createScoreText(obstacle.x, obstacle.y, pts);
+                const isBoss = obstacle.config.type === "boss";
+                if (!isBoss) {
+                    const pts = obstacle.config.hp * 10;
+                    this.score += pts;
+                    this.createScoreText(obstacle.x, obstacle.y, pts);
+                }
                 obstacle.destroy();
                 GameEventBus.emit("obstacle-destroyed", obstacle.config);
-                GameEventBus.emit("score-update", Math.floor(this.score));
+                if (isBoss) {
+                    this.onBossDefeated();
+                } else {
+                    GameEventBus.emit("score-update", Math.floor(this.score));
+                }
             }
         });
     }
@@ -544,6 +578,114 @@ export class GameScene extends Phaser.Scene {
         });
     }
 
+    private spawnBoss() {
+        this.bossSpawned = true;
+
+        // Warning text
+        const { width, height } = this.scale;
+        const warning = this.add.text(width / 2, height / 2 - 40, "⚠️ BOSS INCOMING!", {
+            fontSize: "32px",
+            color: "#ff0000",
+            fontStyle: "bold",
+            stroke: "#000000",
+            strokeThickness: 4
+        }).setOrigin(0.5).setDepth(100);
+
+        this.tweens.add({
+            targets: warning,
+            alpha: 0,
+            y: warning.y - 30,
+            duration: 1500,
+            onComplete: () => warning.destroy()
+        });
+
+        // Pause normal spawning
+        if (this.spawnEvent) this.spawnEvent.paused = true;
+
+        // Spawn boss after warning
+        this.time.delayedCall(1500, () => {
+            const yPos = height - 56;
+            const bossConfig: ObstacleConfig = {
+                type: "boss",
+                hp: 150,
+                damage: 40,
+                speed: this.scrollSpeed * 0.5,
+                sprite: "boss"
+            };
+            this.bossMaxHp = bossConfig.hp;
+
+            const boss = new Obstacle(this, width + 50, yPos, bossConfig);
+            this.obstacles.add(boss);
+
+            // Boss stops near the right side
+            const body = boss.body as Phaser.Physics.Arcade.Body;
+            if (body) {
+                body.setVelocityX(-bossConfig.speed);
+            }
+
+            this.currentBoss = boss;
+            this.bossActive = true;
+
+            // Create HP bar (rendered above boss)
+            this.bossHpBarBg = this.add.rectangle(boss.x, boss.y - 45, 80, 8, 0x333333).setOrigin(0.5).setDepth(90);
+            this.bossHpBar = this.add.rectangle(boss.x, boss.y - 45, 80, 8, 0xff0000).setOrigin(0.5).setDepth(91);
+        });
+    }
+
+    private updateBossHpBar() {
+        if (!this.currentBoss || !this.bossHpBar || !this.bossHpBarBg) return;
+
+        const boss = this.currentBoss;
+        const hpRatio = Math.max(0, boss.config.hp / this.bossMaxHp);
+
+        this.bossHpBarBg.setPosition(boss.x, boss.y - 45);
+        this.bossHpBar.setPosition(boss.x, boss.y - 45);
+        this.bossHpBar.width = 80 * hpRatio;
+
+        // Stop boss near center-right of screen
+        const body = boss.body as Phaser.Physics.Arcade.Body;
+        if (body && boss.x <= this.scale.width * 0.65) {
+            body.setVelocityX(0);
+        }
+    }
+
+    private onBossDefeated() {
+        const { width, height } = this.scale;
+
+        // Victory text
+        const victory = this.add.text(width / 2, height / 2 - 40, "🎉 BOSS DEFEATED!", {
+            fontSize: "32px",
+            color: "#ffff00",
+            fontStyle: "bold",
+            stroke: "#000000",
+            strokeThickness: 4
+        }).setOrigin(0.5).setDepth(100);
+
+        this.tweens.add({
+            targets: victory,
+            alpha: 0,
+            y: victory.y - 30,
+            duration: 2000,
+            onComplete: () => victory.destroy()
+        });
+
+        // Bonus score
+        const bonus = 1500;
+        this.score += bonus;
+        this.createScoreText(width / 2, height / 2, bonus);
+        GameEventBus.emit("score-update", Math.floor(this.score));
+
+        // Clean up HP bar
+        if (this.bossHpBar) { this.bossHpBar.destroy(); this.bossHpBar = null; }
+        if (this.bossHpBarBg) { this.bossHpBarBg.destroy(); this.bossHpBarBg = null; }
+
+        this.bossActive = false;
+        this.currentBoss = null;
+
+        // Resume normal spawning
+        if (this.spawnEvent) this.spawnEvent.paused = false;
+    }
+
     private onHit(player: Phaser.GameObjects.GameObject, obj: Phaser.GameObjects.GameObject) {
         if (this.hp <= 0) return;
 
@@ -553,7 +695,11 @@ export class GameScene extends Phaser.Scene {
         this.playDamageEffects(obstacle.config.damage);
 
         GameEventBus.emit("hp-update", Math.max(0, this.hp));
-        obstacle.destroy();
+
+        // Boss doesn't get destroyed on contact — only normal obstacles do
+        if (obstacle.config.type !== "boss") {
+            obstacle.destroy();
+        }
 
         if (this.hp <= 0) {
             this.gameOver();
@@ -618,6 +764,12 @@ export class GameScene extends Phaser.Scene {
             ease: "Quad.easeOut",
         });
 
+        // Clean up boss state
+        if (this.bossHpBar) { this.bossHpBar.destroy(); this.bossHpBar = null; }
+        if (this.bossHpBarBg) { this.bossHpBarBg.destroy(); this.bossHpBarBg = null; }
+        this.bossActive = false;
+        this.currentBoss = null;
+
         this.time.delayedCall(1000, () => {
             this.scene.start("GameOverScene", { score: Math.floor(this.score) });
         });
@@ -628,6 +780,17 @@ export class GameScene extends Phaser.Scene {
 
         this.ground.tilePositionX += this.scrollSpeed * (delta / 1000);
         this.score += delta / 100;
+
+        // Boss spawn timer
+        this.gameElapsedSec += delta / 1000;
+        if (this.bossEnabled && !this.bossSpawned && this.gameElapsedSec >= this.bossSpawnTimeSec) {
+            this.spawnBoss();
+        }
+
+        // Update boss HP bar position
+        if (this.currentBoss && this.currentBoss.active) {
+            this.updateBossHpBar();
+        }
 
         if (Math.floor(time) % 10 === 0) {
             GameEventBus.emit("score-update", Math.floor(this.score));

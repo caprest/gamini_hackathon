@@ -28,5 +28,7 @@
       "hp": 1,
       "damage": 40
     }
-  }
+  },
+  "bossEnabled": true,
+  "bossSpawnTimeSec": 20
 }
