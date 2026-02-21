@@ -35,7 +35,6 @@ export class GameScene extends Phaser.Scene {
     private spawnEvent!: Phaser.Time.TimerEvent;
     private mpRegenEvent!: Phaser.Time.TimerEvent;
     private lastMeleeAttackAt: number = 0;
-    private damageOverlay!: Phaser.GameObjects.Rectangle;
 
     constructor() {
         super("GameScene");
@@ -63,11 +62,6 @@ export class GameScene extends Phaser.Scene {
 
         // Background sky
         this.add.rectangle(0, 0, width, height, 0x87ceeb).setOrigin(0, 0);
-        this.damageOverlay = this.add
-            .rectangle(width / 2, height / 2, width, height, 0xff5a7a, 1)
-            .setScrollFactor(0)
-            .setDepth(1000)
-            .setAlpha(0);
 
         // Ground
         this.ground = this.add.tileSprite(width / 2, height - 20, width, 40, "ground");
@@ -539,12 +533,9 @@ export class GameScene extends Phaser.Scene {
         const baseX = this.player.x;
 
         this.cameras.main.shake(100 + intensity * 140, 0.004 + intensity * 0.006);
-        this.cameras.main.flash(45, 255, 180, 180, false);
 
         this.tweens.killTweensOf(this.player);
-        this.player.setDisplaySize(Player.DISPLAY_SIZE, Player.DISPLAY_SIZE);
         this.player.setX(baseX);
-        this.player.setTint(0xff6b6b);
         this.tweens.add({
             targets: this.player,
             x: baseX - (6 + 10 * intensity),
@@ -552,21 +543,8 @@ export class GameScene extends Phaser.Scene {
             yoyo: true,
             ease: "Quad.easeOut",
             onComplete: () => {
-                this.player.setDisplaySize(Player.DISPLAY_SIZE, Player.DISPLAY_SIZE);
                 this.player.setX(baseX);
             },
-        });
-        this.time.delayedCall(180, () => {
-            if (this.hp > 0) this.player.clearTint();
-        });
-
-        this.tweens.killTweensOf(this.damageOverlay);
-        this.damageOverlay.setAlpha(0.04 + 0.08 * intensity);
-        this.tweens.add({
-            targets: this.damageOverlay,
-            alpha: 0,
-            duration: 160,
-            ease: "Quad.easeOut",
         });
 
         const damageText = this.add.text(this.player.x + 8, this.player.y - 40, `-${damage}`, {
@@ -585,16 +563,7 @@ export class GameScene extends Phaser.Scene {
             onComplete: () => damageText.destroy(),
         });
 
-        const hitBurst = this.add.particles(0, 0, "particle", {
-            lifespan: { min: 120, max: 260 },
-            speed: { min: 90, max: 240 },
-            scale: { start: 1.8, end: 0 },
-            tint: [0xffffff, 0xffaaaa, 0xff5a7a],
-            blendMode: "ADD",
-            emitting: false,
-        });
-        hitBurst.explode(14 + Math.floor(10 * intensity), this.player.x + 14, this.player.y);
-        this.time.delayedCall(320, () => hitBurst.destroy());
+        // Keep hit feedback readable without square-looking particle artifacts on custom sprites.
     }
 
     private gameOver() {
