@@ -6,6 +6,9 @@ export class BootScene extends Phaser.Scene {
     }
 
     preload() {
+        // Load BGM
+        this.load.audio("bgm", "sounds/bgm.mp3");
+
         // Generate simple particle texture
         const graphics = this.make.graphics({ x: 0, y: 0 });
         graphics.fillStyle(0xffffff, 1);

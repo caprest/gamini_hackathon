@@ -9,15 +9,15 @@
   "meleeRecoveryMs": 100,
   "obstacles": {
     "cactus_small": {
-      "hp": 10,
+      "hp": 1,
       "damage": 20
     },
     "cactus_large": {
-      "hp": 30,
+      "hp": 1,
       "damage": 30
     },
     "pteranodon": {
-      "hp": 20,
+      "hp": 1,
       "damage": 25
     },
     "dino_updown": {
