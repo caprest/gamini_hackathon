@@ -550,12 +550,7 @@ export class GameScene extends Phaser.Scene {
         const obstacle = obj as Obstacle;
         this.hp -= obstacle.config.damage;
 
-        this.player.setTint(0xff0000);
-        this.cameras.main.shake(200, 0.01);
-
-        this.time.delayedCall(200, () => {
-            if (this.hp > 0) this.player.clearTint();
-        });
+        this.playDamageEffects(obstacle.config.damage);
 
         GameEventBus.emit("hp-update", Math.max(0, this.hp));
         obstacle.destroy();
@@ -565,11 +560,63 @@ export class GameScene extends Phaser.Scene {
         }
     }
 
+    private playDamageEffects(damage: number) {
+        const intensity = Phaser.Math.Clamp(damage / 40, 0.25, 1);
+        const baseX = this.player.x;
+
+        this.cameras.main.shake(100 + intensity * 140, 0.004 + intensity * 0.006);
+
+        this.tweens.killTweensOf(this.player);
+        this.player.setX(baseX);
+        this.tweens.add({
+            targets: this.player,
+            x: baseX - (6 + 10 * intensity),
+            duration: 70,
+            yoyo: true,
+            ease: "Quad.easeOut",
+            onComplete: () => {
+                this.player.setX(baseX);
+            },
+        });
+
+        const damageText = this.add.text(this.player.x + 8, this.player.y - 40, `-${damage}`, {
+            fontSize: "24px",
+            color: "#ff7f7f",
+            fontStyle: "bold",
+            stroke: "#3a0606",
+            strokeThickness: 4,
+        }).setOrigin(0.5);
+        this.tweens.add({
+            targets: damageText,
+            y: damageText.y - 36,
+            alpha: 0,
+            duration: 420,
+            ease: "Cubic.easeOut",
+            onComplete: () => damageText.destroy(),
+        });
+
+        // Keep hit feedback readable without square-looking particle artifacts on custom sprites.
+    }
+
     private gameOver() {
         this.physics.pause();
         this.spawnEvent.remove();
         this.mpRegenEvent.remove();
-        this.player.setTint(0x555555);
+
+        // Remove inventory sprites so no icon/background artifact remains above the player on death.
+        this.weaponSprites.forEach((sprite) => sprite.destroy());
+        this.magicSprites.forEach((sprite) => sprite.destroy());
+        this.weaponSprites = [];
+        this.magicSprites = [];
+
+        this.player.clearTint();
+        this.tweens.killTweensOf(this.player);
+        this.tweens.add({
+            targets: this.player,
+            alpha: 0.6,
+            duration: 250,
+            ease: "Quad.easeOut",
+        });
 
         this.time.delayedCall(1000, () => {
             this.scene.start("GameOverScene", { score: Math.floor(this.score) });
