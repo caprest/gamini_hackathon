@@ -36,6 +36,7 @@ export class GameScene extends Phaser.Scene {
     private spawnEvent!: Phaser.Time.TimerEvent;
     private mpRegenEvent!: Phaser.Time.TimerEvent;
     private lastMeleeAttackAt: number = 0;
+    private fallbackAudioContext: AudioContext | null = null;
 
     constructor() {
         super("GameScene");
@@ -89,6 +90,8 @@ export class GameScene extends Phaser.Scene {
         this.input.keyboard!.on("keydown-ONE", () => this.selectSlot(0));
         this.input.keyboard!.on("keydown-TWO", () => this.selectSlot(1));
         this.input.keyboard!.on("keydown-THREE", () => this.selectSlot(2));
+        this.input.keyboard!.once("keydown", () => this.unlockAudioContext());
+        this.input.once("pointerdown", () => this.unlockAudioContext());
         this.input.keyboard!.on("keydown-TAB", (e: KeyboardEvent) => {
             e.preventDefault();
             this.toggleMode();
@@ -382,12 +385,14 @@ export class GameScene extends Phaser.Scene {
 
         if (!currentItem) {
             // Barehand attack
+            this.playAttackSfx("melee", "slash");
             this.performAttack(DEFAULT_GAME_CONFIG.bareHandDamage, "short", "slash", 0xffffff, "⚡");
             this.lastMeleeAttackAt = now;
             return;
         }
 
         if (currentItem.type === "heal") {
+            this.playAttackSfx("heal", currentItem.attack_animation);
             const healAmount = 50;
             this.hp = Math.min(DEFAULT_GAME_CONFIG.initialHP, this.hp + healAmount);
             GameEventBus.emit("hp-update", this.hp);
@@ -419,6 +424,7 @@ export class GameScene extends Phaser.Scene {
         }
 
         // Use weapon/magic attack
+        this.playAttackSfx(currentItem.type, currentItem.attack_animation);
         this.performAttack(
             currentItem.damage,
             currentItem.range,
@@ -550,6 +556,7 @@ export class GameScene extends Phaser.Scene {
         const obstacle = obj as Obstacle;
         this.hp -= obstacle.config.damage;
 
+        this.playDamageSfx(obstacle.config.damage);
         this.playDamageEffects(obstacle.config.damage);
 
         GameEventBus.emit("hp-update", Math.max(0, this.hp));
@@ -557,6 +564,130 @@ export class GameScene extends Phaser.Scene {
 
         if (this.hp <= 0) {
             this.gameOver();
+        }
+    }
+
+    private playDamageSfx(damage: number) {
+        const audioContext = this.resolveAudioContext();
+        if (!audioContext) return;
+        if (audioContext.state === "suspended") {
+            void audioContext.resume();
+            return;
+        }
+
+        const intensity = Phaser.Math.Clamp(damage / 40, 0.2, 1);
+        const now = audioContext.currentTime;
+
+        const osc = audioContext.createOscillator();
+        const gain = audioContext.createGain();
+
+        osc.type = "triangle";
+        osc.frequency.setValueAtTime(200 + intensity * 120, now);
+        osc.frequency.exponentialRampToValueAtTime(75, now + 0.09);
+
+        gain.gain.setValueAtTime(0.0001, now);
+        gain.gain.exponentialRampToValueAtTime(0.12 + intensity * 0.08, now + 0.01);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.12);
+
+        osc.connect(gain);
+        gain.connect(audioContext.destination);
+        osc.start(now);
+        osc.stop(now + 0.11);
+    }
+
+    private playAttackSfx(type: WeaponData["type"], animation: WeaponData["attack_animation"]) {
+        const audioContext = this.resolveAudioContext();
+        if (!audioContext) return;
+        if (audioContext.state === "suspended") {
+            void audioContext.resume();
+            return;
+        }
+
+        const now = audioContext.currentTime;
+        const osc = audioContext.createOscillator();
+        const gain = audioContext.createGain();
+
+        let startFreq = 220;
+        let endFreq = 110;
+        let peakGain = 0.1;
+        let duration = 0.1;
+        let wave: OscillatorType = "square";
+
+        if (type === "melee") {
+            startFreq = animation === "thrust" ? 280 : 210;
+            endFreq = 90;
+            peakGain = 0.11;
+            duration = 0.085;
+            wave = "square";
+        } else if (type === "ranged") {
+            startFreq = animation === "beam" ? 560 : 440;
+            endFreq = animation === "beam" ? 300 : 230;
+            peakGain = 0.09;
+            duration = 0.13;
+            wave = "triangle";
+        } else if (type === "magic") {
+            startFreq = 720;
+            endFreq = 280;
+            peakGain = 0.095;
+            duration = 0.16;
+            wave = "sine";
+        } else if (type === "heal") {
+            startFreq = 420;
+            endFreq = 620;
+            peakGain = 0.085;
+            duration = 0.15;
+            wave = "sine";
+        }
+
+        osc.type = wave;
+        osc.frequency.setValueAtTime(startFreq, now);
+        osc.frequency.exponentialRampToValueAtTime(Math.max(40, endFreq), now + duration);
+
+        gain.gain.setValueAtTime(0.0001, now);
+        gain.gain.exponentialRampToValueAtTime(peakGain, now + 0.01);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+
+        osc.connect(gain);
+        gain.connect(audioContext.destination);
+        osc.start(now);
+        osc.stop(now + duration + 0.01);
+
+        if (type === "magic" || type === "heal") {
+            const sparkle = audioContext.createOscillator();
+            const sparkleGain = audioContext.createGain();
+            sparkle.type = "triangle";
+            sparkle.frequency.setValueAtTime(type === "magic" ? 920 : 760, now);
+            sparkle.frequency.exponentialRampToValueAtTime(430, now + 0.07);
+            sparkleGain.gain.setValueAtTime(0.0001, now);
+            sparkleGain.gain.exponentialRampToValueAtTime(0.045, now + 0.008);
+            sparkleGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.075);
+            sparkle.connect(sparkleGain);
+            sparkleGain.connect(audioContext.destination);
+            sparkle.start(now);
+            sparkle.stop(now + 0.08);
+        }
+    }
+
+    private resolveAudioContext(): AudioContext | null {
+        if ("context" in this.sound && this.sound.context) {
+            return this.sound.context;
+        }
+        if (this.fallbackAudioContext) {
+            return this.fallbackAudioContext;
+        }
+        const AudioContextCtor =
+            window.AudioContext ||
+            (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+        if (!AudioContextCtor) return null;
+        this.fallbackAudioContext = new AudioContextCtor();
+        return this.fallbackAudioContext;
+    }
+
+    private unlockAudioContext() {
+        const audioContext = this.resolveAudioContext();
+        if (!audioContext) return;
+        if (audioContext.state === "suspended") {
+            void audioContext.resume();
         }
     }
 
