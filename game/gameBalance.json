@@ -1,0 +1,10 @@
+{
+  "initialHP": 100,
+  "initialMP": 100,
+  "mpRegenRate": 2,
+  "baseScrollSpeed": 200,
+  "speedIncreaseRate": 10,
+  "spawnInterval": 1500,
+  "bareHandDamage": 5,
+  "meleeRecoveryMs": 100
+}
