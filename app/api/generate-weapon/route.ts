@@ -72,19 +72,89 @@ function tryParseWeaponJson(raw: string): WeaponPayload {
 
 function fallbackWeapon(userInput: string): WeaponPayload {
     const label = userInput.trim().slice(0, 10) || "ことば";
-    return {
-        weapon_name: `${label}の剣`,
-        type: "melee",
-        damage: 25,
-        mp_cost: 8,
-        range: "short",
-        element: "none",
-        sprite_emoji: "🗡️",
-        color: "#4B5563",
-        attack_animation: "slash",
-        description: "安定した予備武器",
-        uniqueness_score: 20,
-    };
+    const hash = Array.from(userInput).reduce((acc, ch) => acc + ch.charCodeAt(0), 0);
+    const variants: WeaponPayload[] = [
+        {
+            weapon_name: `${label}の剣`,
+            type: "melee",
+            damage: 25,
+            mp_cost: 8,
+            range: "short",
+            element: "none",
+            sprite_emoji: "🗡️",
+            color: "#4B5563",
+            attack_animation: "slash",
+            description: "安定した予備武器",
+            uniqueness_score: 20,
+        },
+        {
+            weapon_name: `${label}ブーメラン`,
+            type: "ranged",
+            damage: 28,
+            mp_cost: 10,
+            range: "long",
+            element: "wind",
+            sprite_emoji: "🪃",
+            color: "#14B8A6",
+            attack_animation: "projectile",
+            description: "回転して戻る一撃",
+            uniqueness_score: 28,
+        },
+        {
+            weapon_name: `${label}ビーム`,
+            type: "magic",
+            damage: 32,
+            mp_cost: 16,
+            range: "long",
+            element: "light",
+            sprite_emoji: "✨",
+            color: "#F59E0B",
+            attack_animation: "beam",
+            description: "直線を貫く魔光",
+            uniqueness_score: 35,
+        },
+        {
+            weapon_name: `${label}ボム`,
+            type: "ranged",
+            damage: 35,
+            mp_cost: 14,
+            range: "medium",
+            element: "fire",
+            sprite_emoji: "💣",
+            color: "#EF4444",
+            attack_animation: "explosion",
+            description: "爆発で広範囲攻撃",
+            uniqueness_score: 33,
+        },
+        {
+            weapon_name: `${label}ランス`,
+            type: "melee",
+            damage: 30,
+            mp_cost: 9,
+            range: "medium",
+            element: "thunder",
+            sprite_emoji: "⚡",
+            color: "#A78BFA",
+            attack_animation: "thrust",
+            description: "雷を纏う突撃槍",
+            uniqueness_score: 31,
+        },
+        {
+            weapon_name: `${label}召喚陣`,
+            type: "magic",
+            damage: 34,
+            mp_cost: 18,
+            range: "medium",
+            element: "dark",
+            sprite_emoji: "🔮",
+            color: "#7C3AED",
+            attack_animation: "slash_wide",
+            description: "魔法陣で薙ぎ払う",
+            uniqueness_score: 37,
+        },
+    ];
+
+    return variants[hash % variants.length];
 }
 
 export async function POST(req: NextRequest) {
@@ -130,8 +200,17 @@ export async function POST(req: NextRequest) {
         const model = genAI.getGenerativeModel({
             model: modelName,
             generationConfig: {
-                temperature: 0.9,
-                maxOutputTokens: 300,
+                temperature: 0.2,
+                maxOutputTokens: 4096,
+                responseMimeType: "application/json",
+                responseSchema: WEAPON_RESPONSE_SCHEMA,
+            },
+        });
+        const compactModel = genAI.getGenerativeModel({
+            model: modelName,
+            generationConfig: {
+                temperature: 0,
+                maxOutputTokens: 1024,
                 responseMimeType: "application/json",
                 responseSchema: WEAPON_RESPONSE_SCHEMA,
             },
@@ -154,12 +233,40 @@ export async function POST(req: NextRequest) {
         for (const content of prompts) {
             const result = await model.generateContent(content);
             const raw = result.response.text();
+            const finishReason = result.response.candidates?.[0]?.finishReason;
             try {
                 const weaponData = tryParseWeaponJson(raw);
                 return NextResponse.json(weaponData);
-            } catch (parseError) {
-                console.warn("Gemini JSON parse retry:", parseError);
+            } catch {
+                console.warn("[generate-weapon] JSON parse failed", {
+                    finishReason: finishReason || "UNKNOWN",
+                    rawLength: raw.length,
+                    rawPreview: raw.slice(0, 500),
+                });
+                if (finishReason && finishReason !== "STOP") {
+                    console.warn("[generate-weapon] non-STOP finishReason", {
+                        finishReason,
+                        rawLength: raw.length,
+                    });
+                }
             }
+        }
+
+        // MAX_TOKENS時の最終リトライ: 出力を短く固定してJSON完了率を上げる
+        const compactPrompt = `次の入力から武器を1つ生成し、JSONオブジェクト1つのみ返してください。
+前置き・説明・Markdownは禁止。文字列は短く、descriptionは20文字以内。
+入力: "${userInput}"`;
+        const compactResult = await compactModel.generateContent([{ text: compactPrompt }]);
+        const compactRaw = compactResult.response.text();
+        try {
+            const compactWeapon = tryParseWeaponJson(compactRaw);
+            return NextResponse.json(compactWeapon);
+        } catch {
+            console.warn("[generate-weapon] compact retry parse failed", {
+                finishReason: compactResult.response.candidates?.[0]?.finishReason || "UNKNOWN",
+                rawLength: compactRaw.length,
+                rawPreview: compactRaw.slice(0, 500),
+            });
         }
 
         return NextResponse.json(fallbackWeapon(userInput));
