@@ -794,24 +794,31 @@ export class GameScene extends Phaser.Scene {
             osc.stop(now + 0.35);
         }
 
-        // Create beam visual — a red rectangle that travels from boss to player
-        const beamWidth = boss.x - this.player.x;
-        const beam = this.add.rectangle(
-            boss.x - 20, boss.y, 20, 8, 0xff2200
-        ).setOrigin(1, 0.5).setDepth(80);
+        // Create beam visual — a line of particles + rectangle stretching from boss to player
+        const beamStartX = boss.x - 30;
+        const beamEndX = this.player.x;
+        const beamY = boss.y;
+        const totalDist = beamStartX - beamEndX;
 
-        // Beam glow
-        const glow = this.add.rectangle(
-            boss.x - 20, boss.y, 20, 16, 0xff0000, 0.3
-        ).setOrigin(1, 0.5).setDepth(79);
+        // Beam core (thin red line)
+        const beam = this.add.rectangle(beamStartX, beamY, 0, 6, 0xff2200).setOrigin(1, 0.5).setDepth(80);
+        // Beam glow (wider, semi-transparent)
+        const glow = this.add.rectangle(beamStartX, beamY, 0, 18, 0xff0000, 0.3).setOrigin(1, 0.5).setDepth(79);
 
+        // Animate width from 0 to full distance
         this.tweens.add({
-            targets: [beam, glow],
-            displayWidth: beamWidth + 40,
-            duration: 400,
+            targets: beam,
+            width: totalDist + 20,
+            duration: 350,
+            ease: "Quad.easeIn",
+        });
+        this.tweens.add({
+            targets: glow,
+            width: totalDist + 20,
+            duration: 350,
             ease: "Quad.easeIn",
             onComplete: () => {
-                // Check if beam reaches the player
+                // Beam reached the player
                 if (this.hp > 0) {
                     this.bossBeamHitCount++;
 

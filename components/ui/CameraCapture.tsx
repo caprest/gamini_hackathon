@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { GameEventBus } from "@/game/EventBus";
 import { processWeaponImage } from "@/lib/imageProcessor";
 
@@ -27,7 +27,25 @@ export function CameraCapture() {
     const [previewUrl, setPreviewUrl] = useState<string | null>(null);
     const [spriteUrl, setSpriteUrl] = useState<string | null>(null);
     const [progress, setProgress] = useState("");
+    const [hasStoredImages, setHasStoredImages] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
+
+    useEffect(() => {
+        const check = () => {
+            const hasPlayer = !!localStorage.getItem("customPlayerImage");
+            const hasWeapons = !!localStorage.getItem(CAMERA_WEAPONS_KEY);
+            setHasStoredImages(hasPlayer || hasWeapons);
+        };
+        check();
+        window.addEventListener("storage", check);
+        return () => window.removeEventListener("storage", check);
+    }, []);
+
+    const clearStoredImages = () => {
+        localStorage.removeItem("customPlayerImage");
+        localStorage.removeItem(CAMERA_WEAPONS_KEY);
+        setHasStoredImages(false);
+    };
 
     const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
@@ -176,7 +194,7 @@ export function CameraCapture() {
 
     // idle
     return (
-        <div>
+        <div className="flex gap-2">
             <input
                 ref={fileInputRef}
                 type="file"
@@ -193,6 +211,15 @@ export function CameraCapture() {
                 <span>📸</span>
                 <span className="hidden sm:inline">撮影して武器化</span>
             </button>
+            {hasStoredImages && (
+                <button
+                    onClick={clearStoredImages}
+                    className="px-3 py-3 bg-slate-700 hover:bg-red-700 text-slate-300 hover:text-white rounded-lg transition-colors text-sm"
+                    title="保存された画像を削除"
+                >
+                    🗑
+                </button>
+            )}
         </div>
     );
 }
