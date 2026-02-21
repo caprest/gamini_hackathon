@@ -44,6 +44,10 @@ export class GameScene extends Phaser.Scene {
     create() {
         const { width, height } = this.scale;
 
+        // Play BGM
+        this.sound.stopAll();
+        this.sound.play("bgm", { loop: true, volume: 0.5 });
+
         // Clean up previous sprites
         this.weaponSprites.forEach(s => s.destroy());
         this.magicSprites.forEach(s => s.destroy());
