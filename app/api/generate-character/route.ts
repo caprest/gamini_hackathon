@@ -17,27 +17,34 @@ export async function POST(req: NextRequest) {
             });
         }
 
-        // Banana API (Nano Banana)
-        const response = await fetch("https://api.banana.dev/v1/generate", {
+        // Call Nano Banana (Gemini Image Preview) via Google Generative Language API
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/nano-banana-pro-preview:generateContent?key=${process.env.BANANA_API_KEY}`, {
             method: "POST",
             headers: {
-                "Authorization": `Bearer ${process.env.BANANA_API_KEY}`,
                 "Content-Type": "application/json",
             },
             body: JSON.stringify({
-                prompt: `pixel art style, 32x32 sprite, side view, game character, ${description}, dinosaur character, transparent background, retro game style`,
-                negative_prompt: "realistic, photo, 3d render, blurry",
-                width: 256,
-                height: 256,
+                contents: [{
+                    parts: [{ text: `pixel art style, 32x32 sprite, side view, game character, ${description}, dinosaur character, solid white background, retro game style` }]
+                }]
             }),
         });
 
         if (!response.ok) {
-            throw new Error("Banana API request failed");
+            const errText = await response.text();
+            console.error("Nano Banana API Error:", errText);
+            throw new Error("Nano Banana API request failed");
         }
 
         const data = await response.json();
-        return NextResponse.json({ imageUrl: data.image_url });
+        const inlineData = data.candidates?.[0]?.content?.parts?.[0]?.inlineData;
+
+        if (inlineData) {
+            const imageUrl = `data:${inlineData.mimeType};base64,${inlineData.data}`;
+            return NextResponse.json({ imageUrl });
+        } else {
+            throw new Error("No image data returned from Nano Banana");
+        }
 
     } catch (error: any) {
         console.error("Banana API Error:", error);

@@ -40,10 +40,10 @@ export async function POST(req: NextRequest) {
 }`;
 
         const model = genAI.getGenerativeModel({
-            model: "gemini-2.5-flash",
+            model: "gemini-flash-latest",
             generationConfig: {
                 temperature: 0.9,
-                maxOutputTokens: 300,
+                maxOutputTokens: 1000,
                 responseMimeType: "application/json",
             },
         });
@@ -53,7 +53,79 @@ export async function POST(req: NextRequest) {
             { text: `プレイヤーの入力: "${userInput}"` },
         ]);
 
-        const weaponData = JSON.parse(result.response.text());
+        let rawText = result.response.text();
+
+        if (!rawText) {
+            console.error("Gemini returned empty text. Candidate:", result.response.candidates?.[0]);
+            throw new Error("Empty response from Gemini");
+        }
+
+        // Extract JSON block using regex if wrapped in markdown or conversational text
+        const jsonMatch = rawText.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+        if (jsonMatch) {
+            rawText = jsonMatch[1];
+        } else {
+            const start = rawText.indexOf('{');
+            const end = rawText.lastIndexOf('}');
+            if (start !== -1 && end !== -1) {
+                rawText = rawText.substring(start, end + 1);
+            }
+        }
+
+        rawText = rawText.trim();
+        console.log("Cleaned raw text:", rawText);
+
+        let weaponData;
+        try {
+            weaponData = JSON.parse(rawText);
+        } catch (parseError) {
+            console.error("Failed to parse JSON, using fallback data:", parseError);
+            weaponData = {
+                weapon_name: userInput + "（模造品）",
+                type: "melee",
+                damage: 50,
+                mp_cost: 10,
+                range: "short",
+                element: "none",
+                sprite_emoji: "❓",
+                color: "#FFFFFF",
+                attack_animation: "slash",
+                description: "AIの混乱から生まれた奇妙な武器",
+                uniqueness_score: 50
+            };
+        }
+
+        // Call Nano Banana (Gemini Image Preview) via Google Generative Language API for weapon image if key is present
+        if (process.env.BANANA_API_KEY) {
+            try {
+                const bananaPrompt = `pixel art style, 32x32 sprite, side view, game weapon, ${weaponData.weapon_name}, ${weaponData.element !== "none" ? weaponData.element + " element" : ""}, ${weaponData.description}, solid white background, retro game style`;
+
+                const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/nano-banana-pro-preview:generateContent?key=${process.env.BANANA_API_KEY}`, {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify({
+                        contents: [{
+                            parts: [{ text: bananaPrompt }]
+                        }]
+                    }),
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    const inlineData = data.candidates?.[0]?.content?.parts?.[0]?.inlineData;
+                    if (inlineData) {
+                        weaponData.image_url = `data:${inlineData.mimeType};base64,${inlineData.data}`;
+                    }
+                } else {
+                    console.error("Banana API Weapon Image generation failed:", await response.text());
+                }
+            } catch (imgError) {
+                console.error("Banana API Error for Weapon:", imgError);
+            }
+        }
+
         return NextResponse.json(weaponData);
 
     } catch (error: any) {

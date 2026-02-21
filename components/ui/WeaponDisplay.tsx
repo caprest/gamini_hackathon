@@ -56,7 +56,15 @@ export function WeaponDisplay() {
             style={{ borderColor: weapon.color }}
         >
             <div className="flex items-center gap-4">
-                <div className="text-4xl">{weapon.sprite_emoji}</div>
+                {weapon.image_url ? (
+                    <img
+                        src={weapon.image_url}
+                        alt={weapon.weapon_name}
+                        className="w-16 h-16 object-contain pixelated bg-transparent mix-blend-multiply rounded"
+                    />
+                ) : (
+                    <div className="text-4xl">{weapon.sprite_emoji}</div>
+                )}
                 <div>
                     <div className="font-bold text-lg" style={{ color: weapon.color }}>
                         {weapon.weapon_name}

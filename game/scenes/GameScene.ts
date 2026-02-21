@@ -6,7 +6,7 @@ import { WeaponData, ObstacleConfig, DEFAULT_GAME_CONFIG } from "../../types/gam
 
 export class GameScene extends Phaser.Scene {
     private player!: Player;
-    private obstacles!: Phaser.Physics.Arcade.Group;
+    private obstacles!: Phaser.GameObjects.Group;
     private ground!: Phaser.GameObjects.TileSprite;
 
     private scrollSpeed: number = DEFAULT_GAME_CONFIG.baseScrollSpeed;
@@ -44,8 +44,8 @@ export class GameScene extends Phaser.Scene {
         this.player = new Player(this, 100, height - 80);
         this.physics.add.collider(this.player, this.ground);
 
-        // Obstacles
-        this.obstacles = this.physics.add.group();
+        // Obstacles (normal group to avoid overriding body properties set in Obstacle.ts)
+        this.obstacles = this.add.group();
 
         // Hit detection
         this.physics.add.overlap(
@@ -126,9 +126,31 @@ export class GameScene extends Phaser.Scene {
         const obsY = config.type === "pteranodon" ? height - 120 : yPos;
         const obstacle = new Obstacle(this, width + 50, obsY, config);
         this.obstacles.add(obstacle);
+
+        // Re-apply velocity after adding to the group just in case
+        const body = obstacle.body as Phaser.Physics.Arcade.Body;
+        if (body) {
+            body.setVelocityX(-config.speed);
+        }
     }
 
     setWeapon(weaponData: WeaponData) {
+        if (weaponData.image_url) {
+            const key = "weapon_" + weaponData.weapon_name;
+            if (!this.textures.exists(key)) {
+                const img = new Image();
+                img.onload = () => {
+                    this.textures.addImage(key, img);
+                    this.finalizeSetWeapon(weaponData);
+                };
+                img.src = weaponData.image_url;
+                return;
+            }
+        }
+        this.finalizeSetWeapon(weaponData);
+    }
+
+    private finalizeSetWeapon(weaponData: WeaponData) {
         this.currentWeapon = weaponData;
         this.isCharging = false;
         if (this.chargeEffect) {
@@ -155,7 +177,23 @@ export class GameScene extends Phaser.Scene {
 
     startCharging() {
         if (this.isCharging) return;
+
+        // Check MP for weapon generation (cost 20)
+        if (this.mp < 20) {
+            GameEventBus.emit("mp-insufficient");
+            return;
+        }
+
+        // Deduct MP at generation
+        this.mp -= 20;
+        GameEventBus.emit("mp-update", this.mp);
+
         this.isCharging = true;
+
+        // Clear current weapon text if generating new one
+        if (this.currentWeapon) {
+            this.currentWeapon = null;
+        }
 
         // Create particle effect
         if (!this.chargeEffect) {
@@ -186,30 +224,21 @@ export class GameScene extends Phaser.Scene {
             return;
         }
 
-        if (this.mp < this.currentWeapon.mp_cost) {
-            GameEventBus.emit("mp-insufficient");
-            // Fallback barehand
-            this.performAttack(DEFAULT_GAME_CONFIG.bareHandDamage, "short", "slash", 0xffffff, "⚡");
-            return;
-        }
-
-        // Use magic weapon
-        this.mp -= this.currentWeapon.mp_cost;
-        GameEventBus.emit("mp-update", this.mp);
-
+        // Use magic weapon (no longer costs MP per attack, it persists)
         this.performAttack(
             this.currentWeapon.damage,
             this.currentWeapon.range,
             this.currentWeapon.attack_animation,
             parseInt(this.currentWeapon.color.replace("#", "0x")) || 0xff0000,
-            this.currentWeapon.sprite_emoji
+            this.currentWeapon.sprite_emoji,
+            this.currentWeapon.image_url ? "weapon_" + this.currentWeapon.weapon_name : undefined
         );
 
         GameEventBus.emit("attack-executed", this.currentWeapon);
-        this.currentWeapon = null;
+        // Weapon persists, do not set to null
     }
 
-    private performAttack(damage: number, range: string, animation: string, tint: number, emoji: string) {
+    private performAttack(damage: number, range: string, animation: string, tint: number, emoji: string, textureKey?: string) {
         // Visual representation of attack
         let rangePx = 100;
         if (range === "medium") rangePx = 300;
@@ -236,24 +265,33 @@ export class GameScene extends Phaser.Scene {
             onComplete: () => hitbox.destroy()
         });
 
-        // Add emoji slash visual
-        const emojiVis = this.add.text(this.player.x + 50, this.player.y, emoji, { fontSize: "32px" }).setOrigin(0.5);
+        // Add default emoji or generated image weapon visual
+        let visual: Phaser.GameObjects.GameObject;
+        if (textureKey && this.textures.exists(textureKey)) {
+            visual = this.add.image(this.player.x + 50, this.player.y, textureKey).setOrigin(0.5);
+            (visual as Phaser.GameObjects.Image).setDisplaySize(64, 64);
+            (visual as Phaser.GameObjects.Image).setBlendMode(Phaser.BlendModes.MULTIPLY);
+            // Flip the weapon horizontally if needed, depending on the generated output logic,
+            // usually pixel art faces left or right. We can assume default orientation.
+        } else {
+            visual = this.add.text(this.player.x + 50, this.player.y, emoji, { fontSize: "32px" }).setOrigin(0.5);
+        }
 
-        if (animation === "projectile") {
+        if (animation === "projectile" || animation === "beam") {
             this.tweens.add({
-                targets: emojiVis,
+                targets: visual,
                 x: this.player.x + rangePx,
                 duration: 500,
-                onComplete: () => emojiVis.destroy()
+                onComplete: () => visual.destroy()
             });
         } else {
             this.tweens.add({
-                targets: emojiVis,
+                targets: visual,
                 angle: 180,
                 scale: 1.5,
                 alpha: 0,
                 duration: 300,
-                onComplete: () => emojiVis.destroy()
+                onComplete: () => visual.destroy()
             });
         }
 

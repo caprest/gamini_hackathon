@@ -15,6 +15,7 @@ export interface WeaponData {
   attack_animation: AttackAnimation;
   description: string;
   uniqueness_score: number;
+  image_url?: string;
 }
 
 export interface PlayerState {
