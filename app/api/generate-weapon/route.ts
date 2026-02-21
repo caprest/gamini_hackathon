@@ -267,8 +267,8 @@ export async function POST(req: NextRequest) {
         const modelName = process.env.GEMINI_MODEL?.trim() || "gemini-2.5-flash";
 
         const promptContext = isMagic
-            ? `あなたはゲームの魔法使いAIです。入力に基づき【魔法】を1つ生成してください。\n・回復の意図があれば type="heal", damage=0\n・攻撃魔法なら type="magic", 範囲は広めに設定\n・mp_costは必ず30`
-            : `あなたはゲームの鍛冶屋AIです。入力に基づき【武器】を1つ生成してください。\n・無理やりでも武器として解釈\n・typeは "melee" または "ranged"\n・mp_costは必ず20`;
+            ? `あなたはゲームの魔法使いAIです。入力に基づき【魔法】を1つ生成してください。\n・回復の意図があれば type="heal", damage=0\n・攻撃魔法なら type="magic", 範囲は広めに設定\n・mp_costは必ず30\n・重要: typeは絶対に "magic" か "heal" にしてください。"melee"や"ranged"は使用禁止です。`
+            : `あなたはゲームの鍛冶屋AIです。入力に基づき【武器】を1つ生成してください。\n・無理やりでも武器として解釈\n・typeは絶対に "melee" または "ranged" にしてください。"magic"や"heal"は使用禁止です。\n・mp_costは必ず20`;
 
         const WEAPON_SYSTEM_PROMPT = `${promptContext}
 
@@ -280,7 +280,7 @@ export async function POST(req: NextRequest) {
 ### JSON形式:
 {
   "weapon_name": "名前（日本語）",
-  "type": "melee" | "ranged" | "magic" | "heal",
+  "type": "melee" | "ranged" | "magic" | "heal" (※絶対ルールの通りに指定),
   "damage": 0-100の数値,
   "mp_cost": 20 または 30,
   "range": "short" | "medium" | "long",
